@@ -150,7 +150,7 @@ export function Player() {
         }
     };
 
-    // Post-Render Processing: Find Nodes & Attach Listeners
+    // Post-Render Processing: Find Nodes (Listeners removed in favor of delegation)
     useEffect(() => {
         if (!contentRef.current) return;
 
@@ -162,17 +162,13 @@ export function Player() {
             const idx = parseInt(el.getAttribute('data-tts-index'));
             const text = el.innerText.trim();
             items.push({ text, node: el, index: idx });
-
-            // Attach Click Listener directly
-            el.onclick = (e) => {
-                e.stopPropagation();
-                playFromIndex(idx);
-            };
         });
 
         currentNodes.current = items;
 
     }, [chapterContent]);
+
+
 
 
     // Navigation
@@ -257,6 +253,20 @@ export function Player() {
 
     }, [ttsConfig]);
 
+    // Delegated Click Handler (must be defined after playFromIndex)
+    const handleContentClick = useCallback((e) => {
+        let target = e.target;
+        while (target && target !== contentRef.current) {
+            if (target.getAttribute && target.getAttribute('data-tts-index')) {
+                const idx = parseInt(target.getAttribute('data-tts-index'));
+                e.stopPropagation();
+                playFromIndex(idx);
+                return;
+            }
+            target = target.parentNode;
+        }
+    }, [playFromIndex]);
+
     // Recursion Ref
     useEffect(() => { playNextRef.current = playFromIndex; }, [playFromIndex]);
 
@@ -332,7 +342,7 @@ export function Player() {
                     ← Previous Chapter
                 </button>
 
-                <div ref={contentRef} dangerouslySetInnerHTML={{ __html: chapterContent }} />
+                <div ref={contentRef} onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: chapterContent }} />
 
                 <button
                     onClick={goToNextChapter}

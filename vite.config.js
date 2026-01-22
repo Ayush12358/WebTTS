@@ -26,6 +26,9 @@ export default defineConfig({
             type: 'image/png'
           }
         ]
+      },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 50 * 1024 * 1024, // 50MB to handle WASM files
       }
     })
   ],

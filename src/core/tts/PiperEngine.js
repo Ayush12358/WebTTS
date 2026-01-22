@@ -39,51 +39,12 @@ export class PiperEngine extends TTSEngine {
         try {
             if (callbacks.onStart) callbacks.onStart();
 
-            // Use session with local paths to avoid CDN issues
-            if (!this.session || this.session.voiceId !== voiceId) {
-                this.session = await TtsSession.create({
-                    voiceId: voiceId,
-                    wasmPaths: {
-                        // We serve these from root public dir
-                        onnxWasm: '/',
-                        piperData: '/', // defaults might need checking but typically it loads model from huggingface? 
-                        // Wait, 'piperData' usually refers to tokenizers etc?
-                        // The library documentation says: 
-                        // onnxWasm: path to onnxruntime-web wasm files
-                        // piperWasm: path to piper_phonemize.wasm
-                        // piperData: path to piper_phonemize.data
-
-                        // I need to ensure I have piper_phonemize files too if not using CDN.
-                        // The library bundles them?
-                        // @mintplex-labs/piper-tts-web uses defaults if not provided.
-                        // The error specifically complained about onnxruntime-web dynamic import.
-
-                        // Let's rely on standard layout manually forced:
-                        onnxWasm: '/ort-wasm-simd-threaded.wasm', // It actually looks for the folder usually but let's try path
-                    }
-                });
-            }
-
-            // Actually TtsSession options `wasmPaths` expects paths to *files* or *directories*?
-            // Checking doc again:
-            // "These are the option paths to a PUBLIC directory or server endpoint... onnxWasm: {@link ONNX_BASE}"
-            // It seems it expects the base path.
-
-            // Retrying with cleaner approach:
-            // Copy onnx wasm to public/
-            // Pass the public path.
-
-            // Re-creating session safely
             if (!this.session || this.session.voiceId !== voiceId) {
                 this.session = await TtsSession.create({
                     voiceId: voiceId,
                     logger: console.log,
-                    // Point to where we copied files. 
-                    // If files are in public root, path is './' or '/'
                     wasmPaths: {
-                        onnxWasm: '/', // It appends filename
-                        // We might need to copy piper_phonemize.wasm/.data too if they fail, 
-                        // but error was specifically onnx
+                        onnxWasm: '/', // Points to public root directory
                     }
                 });
             }

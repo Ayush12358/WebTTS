@@ -11,7 +11,7 @@ export const engines = {
 export const getAvailableEngines = () => {
     return [
         { id: 'webSpeech', name: 'Web Speech API' },
-        { id: 'piper', name: 'Piper TTS (Local/WASM)' },
-        { id: 'edge', name: 'Edge TTS (Online)' } // Placeholder
+        { id: 'piper', name: 'Piper TTS (High Quality Local)' },
+        { id: 'edge', name: 'Edge TTS (Online - Experimental)' }
     ];
 };
