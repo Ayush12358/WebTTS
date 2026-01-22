@@ -4,6 +4,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Home } from './Home';
 import { Player } from './Player';
+import { TOC } from './TOC';
 
 function App() {
   return (
@@ -16,6 +17,9 @@ function App() {
         <main>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/book/:id/toc" element={<TOC />} />
+            <Route path="/book/:id/read/:cfi" element={<Player />} />
+            {/* Fallback for old route or direct link */}
             <Route path="/player" element={<Player />} />
           </Routes>
         </main>

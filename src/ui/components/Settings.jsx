@@ -12,7 +12,9 @@ export function Settings({ config, onConfigChange }) {
             const engine = engines[config.engineId];
             if (engine) {
                 const voices = await engine.getVoices();
-                setVoiceList(voices);
+                // Filter for English only as requested
+                const englishVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+                setVoiceList(englishVoices);
             }
         };
         loadVoices();
