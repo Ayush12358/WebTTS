@@ -146,6 +146,28 @@ export function Home() {
                     onChange={onBrowse}
                 />
             </div>
+
+            {/* Credits Footer */}
+            <footer style={{
+                marginTop: '3rem',
+                paddingTop: '1.5rem',
+                borderTop: '1px solid rgba(128,128,128,0.2)',
+                textAlign: 'center',
+                fontSize: '0.85rem',
+                opacity: 0.7
+            }}>
+                <p style={{ margin: '0 0 0.5rem 0' }}>
+                    Created by <strong>Ayush Maurya</strong>
+                </p>
+                <p style={{ margin: 0 }}>
+                    Licensed under <a
+                        href="https://www.apache.org/licenses/LICENSE-2.0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--accent-color, #3B82F6)' }}
+                    >Apache 2.0</a>
+                </p>
+            </footer>
         </div>
     );
 }
