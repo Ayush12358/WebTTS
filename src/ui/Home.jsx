@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { Upload, Book, Trash2 } from 'lucide-react';
+import { ThemeToggle } from './components/ThemeToggle';
 
 export function Home() {
     const navigate = useNavigate();
@@ -64,7 +65,7 @@ export function Home() {
     return (
         <div className="home-container" style={{ maxWidth: '800px', margin: '2rem auto', padding: '1rem' }}>
             <header style={{ marginBottom: '3rem', textAlign: 'center' }}>
-                <h2>Your Library</h2>
+                <h2>WebTTS <ThemeToggle /></h2>
             </header>
 
             {/* Book Grid */}

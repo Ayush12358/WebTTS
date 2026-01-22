@@ -11,18 +11,13 @@ function App() {
   return (
     <BrowserRouter>
       <div className="app-container">
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ margin: 0 }}>WebTTS</h1>
-          <ThemeToggle />
-        </header>
         <main>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/book/:id/toc" element={<TOC />} />
             <Route path="/book/:id/read/:cfi" element={<Player />} />
             <Route path="/test-tts" element={<TTSTester />} />
-            {/* Fallback for old route or direct link */}
-            <Route path="/player" element={<Player />} />
+            <Route path="*" element={<Home />} />
           </Routes>
         </main>
       </div>
