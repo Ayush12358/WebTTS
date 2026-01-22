@@ -29,11 +29,12 @@ body {
 }
 
 .app-container {
-  max-width: 600px;
-  /* Mobile-like width on desktop for readability */
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   height: 100%;
-  padding: 1rem;
+  padding: 0;
+  /* Remove padding here, let child components handle it if needed */
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

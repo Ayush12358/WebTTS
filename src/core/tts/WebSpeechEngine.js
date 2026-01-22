@@ -66,6 +66,9 @@ export class WebSpeechEngine extends TTSEngine {
         };
 
         utterance.onerror = (e) => {
+            if (e.error === 'interrupted' || e.error === 'canceled') {
+                return; // Ignore intentional stops
+            }
             if (callbacks.onError) callbacks.onError(e);
         };
 
