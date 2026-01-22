@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Home } from './Home';
 import { Player } from './Player';
 import { TOC } from './TOC';
+import { TTSTester } from './TTSTester';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/book/:id/toc" element={<TOC />} />
             <Route path="/book/:id/read/:cfi" element={<Player />} />
+            <Route path="/test-tts" element={<TTSTester />} />
             {/* Fallback for old route or direct link */}
             <Route path="/player" element={<Player />} />
           </Routes>

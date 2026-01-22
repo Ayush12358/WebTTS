@@ -32,4 +32,21 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+    proxy: {
+      '/edge-tts-api': {
+        target: 'https://speech.platform.bing.com',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/edge-tts-api/, ''),
+        onProxyReqWs: (proxyReq, req, socket) => {
+          proxyReq.setHeader('Origin', 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold');
+        }
+      }
+    }
+  }
 })

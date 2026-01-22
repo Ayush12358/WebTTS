@@ -55,6 +55,7 @@ export class EdgeEngine extends TTSEngine {
 
             // Connect
             const connectionId = crypto.randomUUID().replace(/-/g, '');
+            // Connect directly (will fail in standard browser due to CORS, but works in potential proxy/extension contexts)
             const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${connectionId}`;
 
             this.ws = new WebSocket(url);
@@ -108,8 +109,6 @@ export class EdgeEngine extends TTSEngine {
 
             this.ws.onerror = (e) => {
                 console.error("Edge WebSocket Error", e);
-                // Try to inform user
-                alert("Edge TTS connection failed (likely blocked by browser). Please switch to 'Piper TTS' or 'Web Speech' in settings.");
                 if (callbacks.onError) callbacks.onError(e);
             };
 
@@ -131,8 +130,7 @@ export class EdgeEngine extends TTSEngine {
                         if (callbacks.onError) callbacks.onError(e);
                     });
                 } else {
-                    // If closed without chunks, maybe error
-                    // But usually turn.end happens.
+                    // Turn end usually handles this, or just close.
                 }
             };
 

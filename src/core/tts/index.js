@@ -12,6 +12,6 @@ export const getAvailableEngines = () => {
     return [
         { id: 'webSpeech', name: 'Web Speech API' },
         { id: 'piper', name: 'Piper TTS (High Quality Local)' },
-        { id: 'edge', name: 'Edge TTS (Online - Experimental)' }
+        { id: 'edge', name: 'Edge TTS (Experimental - CORS Blocked)' }
     ];
 };

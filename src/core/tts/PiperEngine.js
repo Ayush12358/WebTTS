@@ -39,15 +39,20 @@ export class PiperEngine extends TTSEngine {
         try {
             if (callbacks.onStart) callbacks.onStart();
 
-            if (!this.session || this.session.voiceId !== voiceId) {
-                this.session = await TtsSession.create({
-                    voiceId: voiceId,
-                    logger: console.log,
-                    wasmPaths: {
-                        onnxWasm: '/', // Points to public root directory
-                    }
-                });
-            }
+            // Determine WASM base path
+            // In DEV: Point to node_modules so Vite serves it as a module source
+            // In PROD: Point to root (/) where we copied files
+            const wasmBase = import.meta.env.DEV ? '/node_modules/onnxruntime-web/dist/' : '/';
+
+            this.session = await TtsSession.create({
+                voiceId: voiceId,
+                logger: console.log,
+                wasmPaths: {
+                    onnxWasm: wasmBase,
+                    piperWasm: '/piper_phonemize.wasm',
+                    piperData: '/piper_phonemize.data',
+                }
+            });
 
             const blob = await this.session.predict(text);
 
