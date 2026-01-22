@@ -40,19 +40,27 @@ export class PiperEngine extends TTSEngine {
             if (callbacks.onStart) callbacks.onStart();
 
             // Determine WASM base path
-            // In DEV: Point to node_modules so Vite serves it as a module source
-            // In PROD: Point to root (/) where we copied files
             const wasmBase = import.meta.env.DEV ? '/node_modules/onnxruntime-web/dist/' : '/';
 
-            this.session = await TtsSession.create({
-                voiceId: voiceId,
-                logger: console.log,
-                wasmPaths: {
-                    onnxWasm: wasmBase,
-                    piperWasm: '/piper_phonemize.wasm',
-                    piperData: '/piper_phonemize.data',
-                }
-            });
+            // Only create new session if voice changed or no session exists
+            // Note: TtsSession is a singleton internally, but we need to track our voiceId
+            if (!this.session || this.currentVoiceId !== voiceId) {
+                console.log(`Creating new Piper session for voice: ${voiceId}`);
+                this.currentVoiceId = voiceId;
+
+                // Clear any existing singleton to force new voice
+                TtsSession._instance = null;
+
+                this.session = await TtsSession.create({
+                    voiceId: voiceId,
+                    logger: console.log,
+                    wasmPaths: {
+                        onnxWasm: wasmBase,
+                        piperWasm: '/piper_phonemize.wasm',
+                        piperData: '/piper_phonemize.data',
+                    }
+                });
+            }
 
             const blob = await this.session.predict(text);
 

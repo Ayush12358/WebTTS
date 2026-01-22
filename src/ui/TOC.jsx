@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { ArrowLeft, BookOpen, Clock } from 'lucide-react';
 import ePub from 'epubjs';
+import { ThemeToggle } from './components/ThemeToggle';
 
 export function TOC() {
     const { id } = useParams();
@@ -66,6 +67,7 @@ export function TOC() {
                 <h1 style={{ margin: '0 0 0.5rem 0' }}>{meta.title}</h1>
                 <p style={{ margin: 0, opacity: 0.7 }}>{meta.author}</p>
             </div>
+            <ThemeToggle />
 
             <div className="chapter-list">
                 {chapters.length === 0 ? (

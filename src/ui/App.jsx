@@ -1,6 +1,3 @@
-import React from 'react';
-import { ThemeToggle } from './components/ThemeToggle';
-
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Home } from './Home';
 import { Player } from './Player';

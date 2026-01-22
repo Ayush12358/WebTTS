@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getAvailableEngines, engines } from '../../core/tts';
 import { Settings as SettingsIcon, X } from 'lucide-react';
 

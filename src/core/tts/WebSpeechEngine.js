@@ -3,7 +3,7 @@ import { TTSEngine } from './TTSEngine';
 export class WebSpeechEngine extends TTSEngine {
     constructor() {
         super();
-        this.name = 'Web Speech API';
+        this.name = 'System TTS (Browser Voices)';
         this.utterance = null;
     }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import ePub from 'epubjs';
@@ -6,6 +6,7 @@ import { bookStore } from '../core/bookStore';
 import { engines } from '../core/tts';
 import { Settings } from './components/Settings';
 import { Controls } from './components/Controls';
+import { ThemeToggle } from './components/ThemeToggle';
 
 export function Player() {
     const { id, cfi } = useParams();
@@ -18,8 +19,15 @@ export function Player() {
     const contentRef = useRef(null); // Ref to the container div
 
     const [playing, setPlaying] = useState(false);
+
+    // Detect mobile for smart TTS defaults
+    // On mobile: use System TTS (faster, uses device voices like Google TTS)
+    // On desktop: use Piper TTS (higher quality neural voices)
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const defaultEngine = isMobile ? 'webSpeech' : 'piper';
+
     const [ttsConfig, setTtsConfig] = useState({
-        engineId: 'webSpeech',
+        engineId: defaultEngine,
         voiceId: '',
         rate: 1.0
     });
@@ -308,6 +316,7 @@ export function Player() {
                         {id ? 'Chapters' : 'Library'}
                     </Link>
                 </div>
+                <ThemeToggle />
                 <Settings config={ttsConfig} onConfigChange={setTtsConfig} />
             </nav>
 
