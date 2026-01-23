@@ -12,6 +12,20 @@ export class ResponsiveVoiceEngine extends TTSEngine {
         this.voiceList = [];
         this.isLoaded = false;
         this.loadPromise = null;
+        this.apiKey = localStorage.getItem('responsiveVoiceKey') || 'y9dOESmS';
+    }
+
+    setApiKey(key) {
+        if (this.apiKey !== key) {
+            this.apiKey = key;
+            localStorage.setItem('responsiveVoiceKey', key);
+            this.isLoaded = false;
+            if (this.loadPromise) {
+                // If already loading/loaded, we'd need to reload the script
+                // For simplicity, we just mark as not loaded
+                this.loadPromise = null;
+            }
+        }
     }
 
     async init() {
@@ -28,7 +42,7 @@ export class ResponsiveVoiceEngine extends TTSEngine {
 
             // Load ResponsiveVoice script
             const script = document.createElement('script');
-            script.src = 'https://code.responsivevoice.org/responsivevoice.js?key=y9dOESmS';
+            script.src = `https://code.responsivevoice.org/responsivevoice.js?key=${this.apiKey}`;
             script.onload = () => {
                 // Wait for ResponsiveVoice to initialize
                 const checkReady = setInterval(() => {

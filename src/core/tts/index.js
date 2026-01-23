@@ -19,7 +19,7 @@ export const getAvailableEngines = () => {
         { id: 'webSpeech', name: 'System TTS', requiresKey: false },
         { id: 'speakit', name: 'Speakit-JS (Custom)', requiresKey: false },
         { id: 'espeak', name: 'eSpeak-NG (WASM)', requiresKey: false },
-        { id: 'responsiveVoice', name: 'ResponsiveVoice (Free)', requiresKey: false },
+        { id: 'responsiveVoice', name: 'ResponsiveVoice', requiresKey: true },
         { id: 'amazonPolly', name: 'Amazon Polly (5M/month)', requiresKey: true },
         { id: 'googleCloud', name: 'Google Cloud TTS (4M/month)', requiresKey: true }
     ];

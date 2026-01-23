@@ -58,6 +58,7 @@ export class EPUBParser extends BookParser {
 
         // chapterRef can be index (number) or href (string)
         let spineItem;
+        chapterRef = chapterRef + 1;
         if (typeof chapterRef === 'number') {
             spineItem = book.spine.get(chapterRef);
         } else {

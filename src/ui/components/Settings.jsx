@@ -8,6 +8,7 @@ export function Settings({ config, onConfigChange }) {
     const [showApiConfig, setShowApiConfig] = useState(false);
     const [apiKeys, setApiKeys] = useState({
         googleCloud: localStorage.getItem('googleCloudTTSApiKey') || '',
+        responsiveVoice: localStorage.getItem('responsiveVoiceKey') || '',
         awsAccessKey: '',
         awsSecretKey: '',
         awsRegion: 'us-east-1'
@@ -61,6 +62,12 @@ export function Settings({ config, onConfigChange }) {
         engines.googleCloud.setApiKey(apiKeys.googleCloud);
         alert('Google Cloud API key saved!');
         // Reload voices
+        onConfigChange({ ...config });
+    };
+
+    const saveResponsiveVoiceKey = () => {
+        engines.responsiveVoice.setApiKey(apiKeys.responsiveVoice);
+        alert('ResponsiveVoice API key saved!');
         onConfigChange({ ...config });
     };
 
@@ -136,6 +143,29 @@ export function Settings({ config, onConfigChange }) {
                             <button onClick={saveGoogleApiKey} style={{ width: '100%', padding: '0.5rem' }}>
                                 Save API Key
                             </button>
+                        </div>
+                    )}
+
+                    {config.engineId === 'responsiveVoice' && (
+                        <div>
+                            <input
+                                type="password"
+                                placeholder="ResponsiveVoice Key"
+                                value={apiKeys.responsiveVoice}
+                                onChange={(e) => setApiKeys({ ...apiKeys, responsiveVoice: e.target.value })}
+                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.5rem' }}
+                            />
+                            <button onClick={saveResponsiveVoiceKey} style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem' }}>
+                                Save App Key
+                            </button>
+                            <div style={{ fontSize: '0.7rem', opacity: 0.8, lineHeight: '1.2' }}>
+                                <p style={{ marginBottom: '0.25rem' }}>
+                                    If you see a "Site not verified" error, add your domain (e.g. localhost) to the
+                                    <a href="https://responsivevoice.org/dashboard/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-color, #3B82F6)', marginLeft: '4px' }}>
+                                        ResponsiveVoice Dashboard
+                                    </a>.
+                                </p>
+                            </div>
                         </div>
                     )}
 
