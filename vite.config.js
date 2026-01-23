@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'WebTTS - EPUB to Audiobook',
         short_name: 'WebTTS',
@@ -36,27 +36,7 @@ export default defineConfig({
             purpose: 'maskable'
           }
         ]
-      },
-      workbox: {
-        maximumFileSizeToCacheInBytes: 50 * 1024 * 1024, // 50MB to handle WASM files
       }
     })
-  ],
-  server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
-    proxy: {
-      '/edge-tts-api': {
-        target: 'https://speech.platform.bing.com',
-        changeOrigin: true,
-        ws: true,
-        rewrite: (path) => path.replace(/^\/edge-tts-api/, ''),
-        onProxyReqWs: (proxyReq, req, socket) => {
-          proxyReq.setHeader('Origin', 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold');
-        }
-      }
-    }
-  }
+  ]
 })

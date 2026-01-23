@@ -1,17 +1,11 @@
 import { WebSpeechEngine } from './WebSpeechEngine';
-import { PiperEngine } from './PiperEngine';
-import { EdgeEngine } from './EdgeEngine';
 
 export const engines = {
-    webSpeech: new WebSpeechEngine(),
-    piper: new PiperEngine(),
-    edge: new EdgeEngine()
+    webSpeech: new WebSpeechEngine()
 };
 
 export const getAvailableEngines = () => {
     return [
-        { id: 'webSpeech', name: 'System TTS (Browser Voices)' },
-        { id: 'piper', name: 'Piper TTS (High Quality Local)' },
-        { id: 'edge', name: 'Edge TTS (Experimental - CORS Blocked)' }
+        { id: 'webSpeech', name: 'System TTS' }
     ];
 };
