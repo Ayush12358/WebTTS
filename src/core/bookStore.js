@@ -1,5 +1,5 @@
 import localforage from 'localforage';
-import ePub from 'epubjs';
+import { getParserForFile, getSupportedExtensions } from './parsers';
 
 // Configure instances
 const booksStore = localforage.createInstance({
@@ -14,41 +14,54 @@ const metaStore = localforage.createInstance({
 
 export const bookStore = {
     /**
+     * Get supported file extensions
+     */
+    getSupportedExtensions,
+
+    /**
      * Save a new book
      * @param {ArrayBuffer} data 
      * @param {string} fileName 
      */
     addBook: async (data, fileName) => {
         try {
-            // We need to parse it to get metadata and a unique ID
-            const book = ePub(data);
-            const metadata = await book.loaded.metadata;
+            // Get appropriate parser for the file
+            const parser = getParserForFile(fileName);
+            if (!parser) {
+                throw new Error(`Unsupported file format: ${fileName}`);
+            }
 
-            // Generate a simple ID or use title+author?
-            // Using timestamp + valid filename chars for simple ID
+            // Parse the book to extract metadata
+            const parsed = await parser.parse(data, fileName);
+
+            // Generate ID
             const id = Date.now().toString();
 
-            // Extract cover
-            let coverUrl = null;
-            try {
-                const coverUrlRaw = await book.coverUrl();
-                if (coverUrlRaw) {
-                    // Fetch and store as blob? or just dataURL
-                    // Start with dataURL if small, but blob is better. 
-                    // epub.js coverUrl() likely gives a blob url. We need to convert to base64 or Blob for storage?
-                    // Actually, let's just store the text meta first.
+            // Store cover as base64 if available
+            let coverData = null;
+            if (parsed.cover) {
+                try {
+                    const reader = new FileReader();
+                    coverData = await new Promise((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(parsed.cover);
+                    });
+                } catch (e) {
+                    console.warn("Could not process cover", e);
                 }
-            } catch (e) {
-                console.warn("Could not extract cover", e);
             }
 
             const info = {
                 id,
-                title: metadata.title,
-                author: metadata.creator,
+                title: parsed.title,
+                author: parsed.author,
                 fileName,
-                addedAt: Date.now(),
-                // positions/locations can be cached later
+                parserName: parser.name,
+                toc: parsed.toc,
+                spineLength: parsed.spineLength,
+                cover: coverData,
+                addedAt: Date.now()
             };
 
             await booksStore.setItem(id, data);
@@ -94,7 +107,11 @@ export const bookStore = {
         await metaStore.removeItem(id);
     },
 
-    // Legacy support for the refactor transition (can be removed if I update all calls immediately)
-    saveBook: async () => { console.warn("saveBook is deprecated, use addBook"); },
-    loadBook: async () => { console.warn("loadBook is deprecated, use getBookData"); },
+    /**
+     * Get parser for a stored book
+     * @param {string} fileName 
+     */
+    getParser: (fileName) => {
+        return getParserForFile(fileName);
+    }
 };

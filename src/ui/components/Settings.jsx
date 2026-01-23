@@ -202,6 +202,7 @@ export function Settings({ config, onConfigChange }) {
             <div style={{ marginTop: 'auto', fontSize: '0.75rem', opacity: 0.7 }}>
                 <p style={{ margin: '0 0 0.5rem 0' }}>
                     {config.engineId === 'webSpeech' && 'Uses your device\'s built-in voices.'}
+                    {config.engineId === 'speakit' && 'Lightweight wrapper for Web Speech API.'}
                     {config.engineId === 'responsiveVoice' && 'Free unlimited usage with attribution.'}
                     {config.engineId === 'googleCloud' && 'Get API key from Google Cloud Console.'}
                     {config.engineId === 'amazonPolly' && 'Get credentials from AWS IAM Console.'}
