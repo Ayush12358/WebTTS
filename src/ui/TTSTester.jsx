@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 
 export function TTSTester() {
     const [text, setText] = useState("Hello world. This is a test of the text to speech system.");
-    const [selectedEngine, setSelectedEngine] = useState('piper');
+    const [selectedEngine, setSelectedEngine] = useState('webSpeech');
     const [selectedVoice, setSelectedVoice] = useState('');
     const [voices, setVoices] = useState([]);
     const [status, setStatus] = useState('Idle');
