@@ -270,7 +270,6 @@ export function Home() {
                         style={{ color: 'var(--accent-color, #3B82F6)' }}
                     >Apache 2.0</a>
                 </p>
-                <script src="https://code.responsivevoice.org/responsivevoice.js?key=y9dOESmS"></script>
             </footer>
         </div>
     );
