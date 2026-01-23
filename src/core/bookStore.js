@@ -12,6 +12,16 @@ const metaStore = localforage.createInstance({
     storeName: "metadata" // Stores details: title, author, cover, etc.
 });
 
+const bookmarksStore = localforage.createInstance({
+    name: "WebTTS",
+    storeName: "bookmarks" // Stores line-level bookmarks
+});
+
+const settingsStore = localforage.createInstance({
+    name: "WebTTS",
+    storeName: "settings" // Stores app-wide settings (TTS config, etc.)
+});
+
 export const bookStore = {
     /**
      * Get supported file extensions
@@ -59,6 +69,7 @@ export const bookStore = {
                 fileName,
                 parserName: parser.name,
                 toc: parsed.toc,
+                totalWords: parsed.toc?.reduce((acc, curr) => acc + (curr.words || 0), 0) || 0,
                 spineLength: parsed.spineLength,
                 cover: coverData,
                 addedAt: Date.now()
@@ -100,6 +111,21 @@ export const bookStore = {
     },
 
     /**
+     * Update book metadata
+     */
+    updateBookMeta: async (id, updates) => {
+        const meta = await metaStore.getItem(id);
+        if (meta) {
+            const updated = { ...meta, ...updates };
+            // Auto-calculate totalWords if TOC was updated
+            if (updates.toc) {
+                updated.totalWords = updates.toc.reduce((acc, curr) => acc + (curr.words || 0), 0);
+            }
+            await metaStore.setItem(id, updated);
+        }
+    },
+
+    /**
      * Delete book
      */
     removeBook: async (id) => {
@@ -113,5 +139,52 @@ export const bookStore = {
      */
     getParser: (fileName) => {
         return getParserForFile(fileName);
+    },
+
+    /**
+     * Add a bookmark to a specific line
+     */
+    addBookmark: async (bookId, spineIndex, nodeIndex, text) => {
+        const bookmarks = await bookmarksStore.getItem(bookId) || [];
+        const newBookmark = {
+            id: Date.now().toString(),
+            spineIndex,
+            nodeIndex,
+            text: text.length > 100 ? text.substring(0, 100) + "..." : text,
+            timestamp: Date.now()
+        };
+        bookmarks.push(newBookmark);
+        await bookmarksStore.setItem(bookId, bookmarks);
+        return newBookmark;
+    },
+
+    /**
+     * Get all bookmarks for a book
+     */
+    getBookmarks: async (bookId) => {
+        return await bookmarksStore.getItem(bookId) || [];
+    },
+
+    /**
+     * Remove a specific bookmark
+     */
+    removeBookmark: async (bookId, bookmarkId) => {
+        const bookmarks = await bookmarksStore.getItem(bookId) || [];
+        const filtered = bookmarks.filter(b => b.id !== bookmarkId);
+        await bookmarksStore.setItem(bookId, filtered);
+    },
+
+    /**
+     * Get app-wide settings
+     */
+    getSettings: async (key) => {
+        return await settingsStore.getItem(key);
+    },
+
+    /**
+     * Save app-wide setting
+     */
+    saveSettings: async (key, value) => {
+        await settingsStore.setItem(key, value);
     }
 };

@@ -1,12 +1,10 @@
 import { EPUBParser } from './EPUBParser';
-import { PDFParser } from './PDFParser';
 import { MarkdownParser } from './MarkdownParser';
 import { TXTParser } from './TXTParser';
 
 // Registry of all available parsers
 const parsers = [
     new EPUBParser(),
-    new PDFParser(),
     new MarkdownParser(),
     new TXTParser()
 ];
@@ -46,4 +44,4 @@ export function registerParser(parser) {
     parsers.push(parser);
 }
 
-export { EPUBParser, PDFParser, MarkdownParser, TXTParser };
+export { EPUBParser, MarkdownParser, TXTParser };

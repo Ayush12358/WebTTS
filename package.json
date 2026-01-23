@@ -19,7 +19,6 @@
     "marked": "^17.0.1",
     "msedge-tts": "^2.0.3",
     "onnxruntime-web": "^1.23.2",
-    "pdfjs-dist": "^5.4.530",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.12.0",

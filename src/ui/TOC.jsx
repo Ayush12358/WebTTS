@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
-import { ArrowLeft, BookOpen, Clock } from 'lucide-react';
+import { getParserForFile } from '../core/parsers';
+import { ArrowLeft, BookOpen, Clock, Bookmark, Trash2 } from 'lucide-react';
 import { ThemeToggle } from './components/ThemeToggle';
 
 export function TOC() {
@@ -9,7 +10,9 @@ export function TOC() {
     const navigate = useNavigate();
     const [meta, setMeta] = useState(null);
     const [chapters, setChapters] = useState([]);
+    const [bookmarks, setBookmarks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [ttsRate, setTtsRate] = useState(1.0);
 
     useEffect(() => {
         const loadData = async () => {
@@ -21,21 +24,24 @@ export function TOC() {
                 }
                 setMeta(metadata);
 
-                // Use the TOC stored in metadata if available, 
-                // otherwise we would need to parse the book again.
-                // Our new bookStore.addBook stores the TOC.
-                if (metadata.toc) {
+                // Use the TOC stored in metadata if available
+                // But check if it has reading time (words)
+                const hasWords = metadata.toc && metadata.toc.length > 0 && metadata.toc[0].words > 0;
+
+                if (metadata.toc && hasWords) {
                     setChapters(metadata.toc);
                     setLoading(false);
                     return;
                 }
 
-                // Fallback for older books: Need to parse it to get TOC
+                // Fallback for older books or missing word counts: Need to parse it to get TOC with words
                 const data = await bookStore.getBookData(id);
-                const parser = bookStore.getParser(metadata.fileName);
+                const parser = getParserForFile(metadata.fileName);
                 if (parser) {
                     const parsed = await parser.parse(data, metadata.fileName);
                     setChapters(parsed.toc);
+                    // Update metadata with the new TOC (including words) for next time
+                    await bookStore.updateBookMeta(id, { toc: parsed.toc });
                 }
 
                 setLoading(false);
@@ -44,8 +50,43 @@ export function TOC() {
                 setLoading(false);
             }
         };
+
+        const loadBookmarks = async () => {
+            const list = await bookStore.getBookmarks(id);
+            setBookmarks(list);
+        };
+
+        const loadSettings = async () => {
+            const settings = await bookStore.getSettings('ttsConfig');
+            if (settings?.rate) setTtsRate(settings.rate);
+        };
+
         loadData();
+        loadBookmarks();
+        loadSettings();
     }, [id, navigate]);
+
+    const getReadingTime = (words) => {
+        if (!words) return null;
+        const wpm = 200 * ttsRate;
+        const totalMins = Math.ceil(words / wpm);
+
+        if (totalMins >= 60) {
+            const hours = Math.floor(totalMins / 60);
+            const mins = totalMins % 60;
+            return `${hours}h ${mins}m read`;
+        }
+        return `${totalMins} min read`;
+    };
+
+    const totalWords = chapters.reduce((acc, curr) => acc + (curr.words || 0), 0);
+    const totalTime = getReadingTime(totalWords);
+
+    const deleteBookmark = async (e, bookmarkId) => {
+        e.stopPropagation();
+        await bookStore.removeBookmark(id, bookmarkId);
+        setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+    };
 
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Chapter List...</div>;
     if (!meta) return <div style={{ padding: '2rem', textAlign: 'center' }}>Book not found.</div>;
@@ -65,24 +106,19 @@ export function TOC() {
             <div className="book-header" style={{ marginBottom: '2rem', borderBottom: '1px solid rgba(128,128,128,0.2)', paddingBottom: '1rem' }}>
                 <h1 style={{ margin: '0 0 0.5rem 0' }}>{meta.title}</h1>
                 <p style={{ margin: 0, opacity: 0.7 }}>{meta.author}</p>
-                <div style={{ marginTop: '1rem' }}>
-                    <Link
-                        to={`/book/${id}/read/0`}
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            padding: '0.5rem 1rem',
-                            background: 'var(--accent-color, #3B82F6)',
-                            color: '#fff',
-                            borderRadius: '4px',
-                            textDecoration: 'none',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        <BookOpen size={18} /> Start Reading
-                    </Link>
-                </div>
+                {totalTime && (
+                    <div style={{
+                        marginTop: '0.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        color: 'var(--accent-color, #3B82F6)',
+                        fontWeight: '500',
+                        fontSize: '0.9rem'
+                    }}>
+                        <Clock size={16} /> Total: {totalTime}
+                    </div>
+                )}
             </div>
 
             <div className="chapter-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -105,15 +141,70 @@ export function TOC() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '1rem',
-                                transition: 'background 0.2s'
+                                transition: 'background 0.2s',
+                                position: 'relative'
                             }}
                         >
                             <span style={{ opacity: 0.5, fontSize: '0.8rem', minWidth: '24px' }}>{index + 1}</span>
-                            <span style={{ fontWeight: 500 }}>{chapter.title || chapter.label || `Chapter ${index + 1}`}</span>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 500 }}>{chapter.title || chapter.label || `Chapter ${index + 1}`}</div>
+                                {chapter.words > 0 && (
+                                    <div style={{
+                                        fontSize: '0.75rem',
+                                        color: 'var(--accent-color, #3B82F6)',
+                                        opacity: 0.8,
+                                        marginTop: '4px'
+                                    }}>
+                                        {getReadingTime(chapter.words)}
+                                    </div>
+                                )}
+                            </div>
+                            {bookmarks.some(b => parseInt(b.spineIndex) === index) && (
+                                <Bookmark size={14} style={{ color: 'var(--accent-color)', opacity: 0.8 }} />
+                            )}
                         </div>
                     ))
                 )}
             </div>
+
+            {bookmarks.length > 0 && (
+                <div className="bookmark-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '3rem' }}>
+                    <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Bookmark size={20} /> Bookmarks
+                    </h3>
+                    {bookmarks.map((b) => (
+                        <div
+                            key={b.id}
+                            onClick={() => navigate(`/book/${id}/read/${b.spineIndex}?node=${b.nodeIndex}`)}
+                            style={{
+                                padding: '1rem',
+                                border: '1px solid rgba(128,128,128,0.1)',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                position: 'relative'
+                            }}
+                        >
+                            <div style={{ flex: 1 }}>
+                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontStyle: 'italic', opacity: 0.8 }}>
+                                    "{b.text}"
+                                </p>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.5 }}>
+                                    Chapter {b.spineIndex + 1} • {new Date(b.timestamp).toLocaleDateString()}
+                                </span>
+                            </div>
+                            <button
+                                onClick={(e) => deleteBookmark(e, b.id)}
+                                style={{ background: 'transparent', color: 'red', opacity: 0.5 }}
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

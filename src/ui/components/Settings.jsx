@@ -7,29 +7,13 @@ export function Settings({ config, onConfigChange }) {
     const [voiceList, setVoiceList] = useState([]);
     const [showApiConfig, setShowApiConfig] = useState(false);
     const [apiKeys, setApiKeys] = useState({
-        googleCloud: localStorage.getItem('googleCloudTTSApiKey') || '',
-        responsiveVoice: localStorage.getItem('responsiveVoiceKey') || '',
-        awsAccessKey: '',
-        awsSecretKey: '',
-        awsRegion: 'us-east-1'
+        googleCloud: localStorage.getItem('googleCloudTTSApiKey') || ''
     });
 
     const availableEngines = getAvailableEngines();
     const currentEngineInfo = availableEngines.find(e => e.id === config.engineId);
 
-    // Load saved AWS credentials
-    useEffect(() => {
-        const saved = localStorage.getItem('awsPollyCredentials');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            setApiKeys(prev => ({
-                ...prev,
-                awsAccessKey: parsed.accessKeyId || '',
-                awsSecretKey: parsed.secretAccessKey || '',
-                awsRegion: parsed.region || 'us-east-1'
-            }));
-        }
-    }, []);
+
 
     useEffect(() => {
         const loadVoices = async () => {
@@ -58,6 +42,10 @@ export function Settings({ config, onConfigChange }) {
         onConfigChange({ ...config, rate: parseFloat(e.target.value) });
     };
 
+    const handlePitchChange = (e) => {
+        onConfigChange({ ...config, pitch: parseFloat(e.target.value) });
+    };
+
     const saveGoogleApiKey = () => {
         engines.googleCloud.setApiKey(apiKeys.googleCloud);
         alert('Google Cloud API key saved!');
@@ -65,21 +53,7 @@ export function Settings({ config, onConfigChange }) {
         onConfigChange({ ...config });
     };
 
-    const saveResponsiveVoiceKey = () => {
-        engines.responsiveVoice.setApiKey(apiKeys.responsiveVoice);
-        alert('ResponsiveVoice API key saved!');
-        onConfigChange({ ...config });
-    };
 
-    const saveAwsCredentials = () => {
-        engines.amazonPolly.setCredentials(
-            apiKeys.awsAccessKey,
-            apiKeys.awsSecretKey,
-            apiKeys.awsRegion
-        );
-        alert('AWS credentials saved!');
-        onConfigChange({ ...config });
-    };
 
     if (!isOpen) {
         return (
@@ -146,60 +120,9 @@ export function Settings({ config, onConfigChange }) {
                         </div>
                     )}
 
-                    {config.engineId === 'responsiveVoice' && (
-                        <div>
-                            <input
-                                type="password"
-                                placeholder="ResponsiveVoice Key"
-                                value={apiKeys.responsiveVoice}
-                                onChange={(e) => setApiKeys({ ...apiKeys, responsiveVoice: e.target.value })}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.5rem' }}
-                            />
-                            <button onClick={saveResponsiveVoiceKey} style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem' }}>
-                                Save App Key
-                            </button>
-                            <div style={{ fontSize: '0.7rem', opacity: 0.8, lineHeight: '1.2' }}>
-                                <p style={{ marginBottom: '0.25rem' }}>
-                                    If you see a "Site not verified" error, add your domain (e.g. localhost) to the
-                                    <a href="https://responsivevoice.org/dashboard/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-color, #3B82F6)', marginLeft: '4px' }}>
-                                        ResponsiveVoice Dashboard
-                                    </a>.
-                                </p>
-                            </div>
-                        </div>
-                    )}
 
-                    {config.engineId === 'amazonPolly' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <input
-                                type="text"
-                                placeholder="AWS Access Key ID"
-                                value={apiKeys.awsAccessKey}
-                                onChange={(e) => setApiKeys({ ...apiKeys, awsAccessKey: e.target.value })}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
-                            />
-                            <input
-                                type="password"
-                                placeholder="AWS Secret Access Key"
-                                value={apiKeys.awsSecretKey}
-                                onChange={(e) => setApiKeys({ ...apiKeys, awsSecretKey: e.target.value })}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
-                            />
-                            <select
-                                value={apiKeys.awsRegion}
-                                onChange={(e) => setApiKeys({ ...apiKeys, awsRegion: e.target.value })}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
-                            >
-                                <option value="us-east-1">US East (N. Virginia)</option>
-                                <option value="us-west-2">US West (Oregon)</option>
-                                <option value="eu-west-1">EU (Ireland)</option>
-                                <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
-                            </select>
-                            <button onClick={saveAwsCredentials} style={{ width: '100%', padding: '0.5rem' }}>
-                                Save AWS Credentials
-                            </button>
-                        </div>
-                    )}
+
+
                 </div>
             )}
 
@@ -229,14 +152,23 @@ export function Settings({ config, onConfigChange }) {
                 />
             </div>
 
+            <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Pitch ({config.pitch})</label>
+                <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={config.pitch}
+                    onChange={handlePitchChange}
+                    style={{ width: '100%' }}
+                />
+            </div>
+
             <div style={{ marginTop: 'auto', fontSize: '0.75rem', opacity: 0.7 }}>
                 <p style={{ margin: '0 0 0.5rem 0' }}>
                     {config.engineId === 'webSpeech' && 'Uses your device\'s built-in voices.'}
-                    {config.engineId === 'speakit' && 'Lightweight wrapper for Web Speech API.'}
-                    {config.engineId === 'espeak' && 'Offline WASM-based speech synthesizer.'}
-                    {config.engineId === 'responsiveVoice' && 'Free unlimited usage with attribution.'}
                     {config.engineId === 'googleCloud' && 'Get API key from Google Cloud Console.'}
-                    {config.engineId === 'amazonPolly' && 'Get credentials from AWS IAM Console.'}
                 </p>
                 <a
                     href="/test-tts"

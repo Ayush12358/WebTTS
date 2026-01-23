@@ -33,15 +33,40 @@ export class EPUBParser extends BookParser {
             console.warn("Could not extract EPUB cover", e);
         }
 
-        // Extract TOC
-        const toc = navigation.toc.map(item => ({
-            title: item.label,
-            href: item.href,
-            subitems: item.subitems?.map(sub => ({
-                title: sub.label,
-                href: sub.href
-            })) || []
-        }));
+        // Extract TOC and word counts
+        const toc = [];
+        for (let i = 0; i < book.spine.length; i++) {
+            const item = book.spine.get(i);
+            if (!item) continue;
+
+            const navItem = navigation.toc.find(n => n.href.includes(item.href) || item.href.includes(n.href));
+
+            try {
+                const doc = await item.load(book.load.bind(book));
+                let text = "";
+                if (doc) {
+                    if (doc.body) text = doc.body.textContent || doc.body.innerText || "";
+                    else if (doc.textContent) text = doc.textContent;
+                    else if (typeof doc === 'string') text = doc;
+                }
+                const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+
+                toc.push({
+                    title: navItem ? navItem.label : `Chapter ${i + 1}`,
+                    href: item.href,
+                    words: words,
+                    spineIndex: i
+                });
+            } catch (e) {
+                console.warn(`Failed to count words for chapter ${i}`, e);
+                toc.push({
+                    title: navItem ? navItem.label : `Chapter ${i + 1}`,
+                    href: item.href,
+                    words: 0,
+                    spineIndex: i
+                });
+            }
+        }
 
         return {
             title: metadata.title || 'Unknown Title',
@@ -58,7 +83,6 @@ export class EPUBParser extends BookParser {
 
         // chapterRef can be index (number) or href (string)
         let spineItem;
-        chapterRef = chapterRef + 1;
         if (typeof chapterRef === 'number') {
             spineItem = book.spine.get(chapterRef);
         } else {
@@ -91,9 +115,12 @@ export class EPUBParser extends BookParser {
         // Get body content
         const bodyEl = doc.body || doc.querySelector('body');
         const html = bodyEl ? bodyEl.innerHTML : '';
+        const textContent = bodyEl ? (bodyEl.textContent || bodyEl.innerText || '') : '';
+        const words = textContent.trim().split(/\s+/).filter(w => w.length > 0).length;
 
         return {
             html,
+            words,
             title: spineItem.idref || `Chapter ${chapterRef}`
         };
     }

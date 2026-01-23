@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { engines, getAvailableEngines } from '../core/tts';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Play, Square, RefreshCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ThemeToggle } from './components/ThemeToggle';
 
 export function TTSTester() {
-    const [text, setText] = useState("Hello world. This is a test of the text to speech system.");
+    const [text, setText] = useState("This is a simple test of the text-to-speech system.");
     const [selectedEngine, setSelectedEngine] = useState('webSpeech');
     const [selectedVoice, setSelectedVoice] = useState('');
     const [voices, setVoices] = useState([]);
     const [status, setStatus] = useState('Idle');
     const [logs, setLogs] = useState([]);
+    const [controls, setControls] = useState({ rate: 1.0, pitch: 1.0 });
 
-    const log = (msg) => setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]);
+    const log = (msg) => {
+        setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 50));
+    };
 
     const loadVoices = async () => {
-        setStatus('Loading voices...');
-        log(`Loading voices for ${selectedEngine}...`);
+        setStatus('Initializing...');
         try {
             const engine = engines[selectedEngine];
             await engine.init();
@@ -23,15 +26,12 @@ export function TTSTester() {
             setVoices(list);
             if (list.length > 0) {
                 setSelectedVoice(list[0].id);
-                log(`Loaded ${list.length} voices.`);
-            } else {
-                log('No voices found or empty list.');
+                log(`Loaded ${list.length} voices for ${selectedEngine}`);
             }
             setStatus('Ready');
         } catch (e) {
-            setStatus('Error loading voices');
+            setStatus('Error');
             log(`Error: ${e.message}`);
-            console.error(e);
         }
     };
 
@@ -42,108 +42,145 @@ export function TTSTester() {
     const handleSpeak = async () => {
         if (!selectedVoice) return;
         setStatus('Speaking...');
-        log(`Requesting speak on ${selectedEngine} with voice ${selectedVoice}`);
-
         try {
             const engine = engines[selectedEngine];
             await engine.speak(text, {
                 voiceId: selectedVoice,
-                rate: 1.0,
-                pitch: 1.0
+                rate: controls.rate,
+                pitch: controls.pitch
             }, {
-                onStart: () => {
-                    setStatus('Playing');
-                    log('Event: onStart received');
-                },
-                onEnd: () => {
-                    setStatus('Finished');
-                    log('Event: onEnd received');
-                },
+                onStart: () => setStatus('Playing'),
+                onEnd: () => setStatus('Finished'),
                 onError: (e) => {
                     setStatus('Error');
-                    log(`Event: onError received - ${e}`);
-                    console.error(e);
+                    log(`Speech Error: ${e}`);
                 }
             });
         } catch (e) {
             setStatus('Exception');
             log(`Exception: ${e.message}`);
-            console.error(e);
         }
     };
 
     const handleStop = () => {
-        const engine = engines[selectedEngine];
-        engine.stop();
+        engines[selectedEngine].stop();
         setStatus('Stopped');
-        log('Stopped manually');
     };
 
     return (
-        <div className="p-4 max-w-2xl mx-auto h-screen flex flex-col">
-            <div className="flex items-center gap-4 mb-6">
-                <Link to="/" className="text-blue-500 hover:underline"><ArrowLeft /></Link>
-                <h1 className="text-2xl font-bold">TTS Diagnostics</h1>
-            </div>
+        <div style={{
+            maxWidth: '600px',
+            margin: '0 auto',
+            padding: '2rem 1rem',
+            color: 'var(--text-primary)',
+            fontFamily: 'inherit'
+        }}>
+            <header style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+                <Link to="/" style={{ color: 'inherit' }}><ArrowLeft /></Link>
+                <h1 style={{ fontSize: '1.5rem', margin: 0 }}>TTS Diagnostics <ThemeToggle /></h1>
+            </header>
 
-            <div className="space-y-4 flex-1 overflow-y-auto">
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded border">
-                    <label className="block text-sm font-medium mb-1">Engine</label>
-                    <select
-                        value={selectedEngine}
-                        onChange={e => setSelectedEngine(e.target.value)}
-                        className="w-full p-2 border rounded dark:bg-gray-700"
-                    >
-                        {getAvailableEngines().map(e => (
-                            <option key={e.id} value={e.id}>{e.name}</option>
-                        ))}
-                    </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {/* Status Indicator */}
+                <div style={{
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    background: 'var(--bg-secondary)',
+                    fontSize: '0.875rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    border: '1px solid var(--border-color)'
+                }}>
+                    <div style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: status === 'Playing' ? '#22c55e' : '#94a3b8'
+                    }} />
+                    <span>Status: <strong style={{ color: 'var(--text-primary)' }}>{status}</strong></span>
                 </div>
 
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded border">
-                    <label className="block text-sm font-medium mb-1">Voice</label>
-                    <div className="flex gap-2">
+                {/* Main Controls */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>ENGINE</label>
                         <select
-                            value={selectedVoice}
-                            onChange={e => setSelectedVoice(e.target.value)}
-                            className="w-full p-2 border rounded dark:bg-gray-700"
+                            value={selectedEngine}
+                            onChange={e => setSelectedEngine(e.target.value)}
+                            style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color, #ccc)', background: 'transparent', color: 'inherit' }}
                         >
-                            {voices.map(v => (
-                                <option key={v.id} value={v.id}>{v.name}</option>
-                            ))}
+                            {getAvailableEngines().map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                         </select>
-                        <button onClick={loadVoices} className="px-3 py-1 bg-gray-200 rounded">Reload</button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>VOICE</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <select
+                                value={selectedVoice}
+                                onChange={e => setSelectedVoice(e.target.value)}
+                                style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color, #ccc)', background: 'transparent', color: 'inherit' }}
+                            >
+                                {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                            </select>
+                            <button onClick={loadVoices} style={{ padding: '0.5rem', background: 'transparent', border: '1px solid var(--border-color, #ccc)', borderRadius: '4px', color: 'inherit' }}><RefreshCcw size={16} /></button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded border">
-                    <label className="block text-sm font-medium mb-1">Test Phrase</label>
+                {/* Sliders */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>SPEED ({controls.rate}x)</label>
+                        <input type="range" min="0.5" max="2.0" step="0.1" value={controls.rate} onChange={e => setControls({ ...controls, rate: parseFloat(e.target.value) })} style={{ width: '100%' }} />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>PITCH ({controls.pitch}x)</label>
+                        <input type="range" min="0.5" max="2.0" step="0.1" value={controls.pitch} onChange={e => setControls({ ...controls, pitch: parseFloat(e.target.value) })} style={{ width: '100%' }} />
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.7 }}>TEST TEXT</label>
                     <textarea
                         value={text}
                         onChange={e => setText(e.target.value)}
-                        className="w-full p-2 border rounded dark:bg-gray-700 h-24"
+                        style={{ padding: '0.75rem', borderRadius: '4px', border: '1px solid var(--border-color, #ccc)', background: 'transparent', color: 'inherit', minHeight: '80px', resize: 'vertical' }}
                     />
                 </div>
 
-                <div className="flex gap-4">
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button
                         onClick={handleSpeak}
-                        className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold"
+                        style={{ flex: 1, padding: '0.75rem', background: 'var(--accent-color, #3b82f6)', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                     >
-                        Speak
+                        <Play size={18} fill="currentColor" /> SPEAK
                     </button>
                     <button
                         onClick={handleStop}
-                        className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold"
+                        style={{ padding: '0.75rem', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '4px', cursor: 'pointer' }}
                     >
-                        Stop
+                        <Square size={18} fill="currentColor" />
                     </button>
                 </div>
 
-                <div className="mt-6">
-                    <h3 className="font-bold mb-2">Status: <span className="font-mono">{status}</span></h3>
-                    <div className="bg-black text-green-400 p-4 rounded h-64 overflow-y-auto font-mono text-xs">
-                        {logs.map((l, i) => <div key={i}>{l}</div>)}
+                {/* Simple Log */}
+                <div style={{ marginTop: '1rem' }}>
+                    <h3 style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>History</h3>
+                    <div style={{
+                        height: '150px',
+                        overflowY: 'auto',
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace',
+                        background: 'var(--bg-secondary)',
+                        padding: '0.5rem',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)'
+                    }}>
+                        {logs.map((l, i) => <div key={i} style={{ marginBottom: '0.25rem' }}>{l}</div>)}
+                        {logs.length === 0 && <div style={{ opacity: 0.5 }}>No events logged yet.</div>}
                     </div>
                 </div>
             </div>

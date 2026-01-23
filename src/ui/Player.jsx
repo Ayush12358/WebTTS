@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { bookStore } from '../core/bookStore';
 import { getParserForFile } from '../core/parsers';
@@ -21,15 +21,18 @@ export function Player() {
     const contentRef = useRef(null); // Ref to the container div
 
     const [playing, setPlaying] = useState(false);
+    const [bookmarks, setBookmarks] = useState([]);
 
     const [ttsConfig, setTtsConfig] = useState({
         engineId: 'webSpeech',
         voiceId: '',
-        rate: 1.0
+        rate: 1.0,
+        pitch: 1.0
     });
 
     // Playback State
     const [currentIndex, setCurrentIndex] = useState(-1);
+    const [searchParams] = useSearchParams();
     const currentNodes = useRef([]); // Speakable nodes
     const navigate = useNavigate();
 
@@ -45,6 +48,12 @@ export function Player() {
                 if (!id) {
                     navigate('/');
                     return;
+                }
+
+                // Load saved TTS settings
+                const savedSettings = await bookStore.getSettings('ttsConfig');
+                if (savedSettings) {
+                    setTtsConfig(savedSettings);
                 }
 
                 const bookData = await bookStore.getBookData(id);
@@ -81,7 +90,18 @@ export function Player() {
             }
         };
         loadBook();
+        loadBookmarks();
     }, [id, navigate]);
+
+    // Save settings when ttsConfig changes
+    useEffect(() => {
+        bookStore.saveSettings('ttsConfig', ttsConfig);
+    }, [ttsConfig]);
+
+    const loadBookmarks = async () => {
+        const list = await bookStore.getBookmarks(id);
+        setBookmarks(list);
+    };
 
     // Load Chapter Content
     const loadChapter = async (currentParser, bookInstance, index) => {
@@ -130,7 +150,29 @@ export function Player() {
         });
 
         currentNodes.current = items;
-    }, [chapterContent]);
+
+        // Apply visual markers for existing bookmarks in this chapter
+        const chapterBookmarks = bookmarks.filter(b => parseInt(b.spineIndex) === currentSpineIndex);
+        chapterBookmarks.forEach(b => {
+            const target = items.find(n => n.index === parseInt(b.nodeIndex));
+            if (target) target.node.classList.add('is-bookmarked');
+        });
+
+        // Jump to bookmarked line if present in URL
+        const nodeToJump = searchParams.get('node');
+        if (nodeToJump !== null && items.length > 0) {
+            const idx = parseInt(nodeToJump);
+            const target = items.find(n => n.index === idx);
+            if (target) {
+                setTimeout(() => {
+                    target.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    target.node.classList.add('tts-active');
+                    // Remove highlight after a delay so it's not permanent unless playing
+                    setTimeout(() => target.node.classList.remove('tts-active'), 2000);
+                }, 100);
+            }
+        }
+    }, [chapterContent, searchParams, bookmarks]);
 
     // Navigation
     const goToNextChapter = () => {
@@ -191,7 +233,8 @@ export function Player() {
         try {
             await speechEngine.speak(item.text, {
                 voiceId: ttsConfig.voiceId,
-                rate: ttsConfig.rate
+                rate: ttsConfig.rate,
+                pitch: ttsConfig.pitch
             }, {
                 onEnd: () => {
                     if (playingRef.current) {
@@ -210,6 +253,12 @@ export function Player() {
     }, [ttsConfig]);
 
     const handleContentClick = useCallback((e) => {
+        // If this click follows a long press, ignore it
+        if (isLongPress.current) {
+            isLongPress.current = false;
+            return;
+        }
+
         let target = e.target;
         while (target && target !== contentRef.current) {
             if (target.getAttribute && target.getAttribute('data-tts-index')) {
@@ -241,6 +290,118 @@ export function Player() {
         }
     };
 
+    const handleBookmark = async () => {
+        if (currentIndex < 0 || !currentNodes.current[currentIndex]) {
+            return;
+        }
+        await saveBookmark(currentSpineIndex, currentIndex, currentNodes.current[currentIndex].text);
+    };
+
+    const saveBookmark = useCallback(async (spineIndex, nodeIndex, text) => {
+        try {
+            const si = parseInt(spineIndex);
+            const ni = parseInt(nodeIndex);
+
+            const existing = bookmarks.find(b =>
+                parseInt(b.spineIndex) === si &&
+                parseInt(b.nodeIndex) === ni
+            );
+
+            if (existing) {
+                await bookStore.removeBookmark(id, existing.id);
+                setBookmarks(prev => prev.filter(b => b.id !== existing.id));
+                const target = currentNodes.current.find(n => n.index === ni);
+                if (target) target.node.classList.remove('is-bookmarked');
+            } else {
+                const newB = await bookStore.addBookmark(id, si, ni, text);
+                setBookmarks(prev => [...prev, newB]);
+                const target = currentNodes.current.find(n => n.index === ni);
+                if (target) target.node.classList.add('is-bookmarked');
+            }
+        } catch (e) {
+            console.error("Failed to toggle bookmark", e);
+        }
+    }, [id, bookmarks]);
+
+    const handleContextMenu = useCallback((e) => {
+        e.preventDefault();
+
+        // If our long-press timer already handled this, just exit
+        if (isLongPress.current) {
+            // Note: We don't reset isLongPress here because handleContentClick needs it
+            return;
+        }
+
+        // Handle right-click or native long-press
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+
+        let target = e.target;
+        while (target && target !== contentRef.current) {
+            if (target.getAttribute && target.getAttribute('data-tts-index')) {
+                const idx = parseInt(target.getAttribute('data-tts-index'));
+                const text = target.innerText.trim();
+                saveBookmark(currentSpineIndex, idx, text);
+                return;
+            }
+            target = target.parentNode;
+        }
+    }, [saveBookmark, currentSpineIndex]);
+
+    // Unified Pointer Logic (Mouse + Touch)
+    const longPressTimer = useRef(null);
+    const lastPointerPos = useRef({ x: 0, y: 0 });
+    const isLongPress = useRef(false);
+
+    const handlePointerDown = useCallback((e) => {
+        // Only trigger for primary button (left click / single touch)
+        if (e.button !== 0) return;
+        isLongPress.current = false;
+
+        let target = e.target;
+        while (target && target !== contentRef.current) {
+            if (target.getAttribute && target.getAttribute('data-tts-index')) {
+                const idx = parseInt(target.getAttribute('data-tts-index'));
+                const text = target.innerText.trim();
+
+                lastPointerPos.current = { x: e.clientX, y: e.clientY };
+
+                longPressTimer.current = setTimeout(() => {
+                    isLongPress.current = true;
+                    if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
+                    saveBookmark(currentSpineIndex, idx, text);
+                    longPressTimer.current = null;
+                }, 500); // Back to 500ms, but now with better conflict resolution
+                return;
+            }
+            target = target.parentNode;
+        }
+    }, [saveBookmark, currentSpineIndex]);
+
+    const handlePointerUp = useCallback(() => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    }, []);
+
+    const handlePointerMove = useCallback((e) => {
+        if (!longPressTimer.current) return;
+
+        // If user moves more than 10px, cancel the long press (assume they are scrolling)
+        const dist = Math.sqrt(
+            Math.pow(e.clientX - lastPointerPos.current.x, 2) +
+            Math.pow(e.clientY - lastPointerPos.current.y, 2)
+        );
+
+        if (dist > 10) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    }, []);
+
     return (
         <div className="player-container" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <nav style={{
@@ -267,12 +428,18 @@ export function Player() {
 
             <div
                 className="reader-content"
+                onContextMenu={handleContextMenu}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                onPointerMove={handlePointerMove}
+                onPointerCancel={handlePointerUp}
                 style={{
                     flex: 1,
                     overflowY: 'auto',
                     padding: '1rem 1rem 6rem 1rem',
                     lineHeight: '1.6',
-                    fontSize: '1.1rem'
+                    fontSize: '1.1rem',
+                    touchAction: 'pan-y' // Ensure vertical scroll but allow our pointer logic
                 }}
             >
                 <button
@@ -324,8 +491,23 @@ export function Player() {
             </div>
 
             <style>{`
-            .tts-speakable { cursor: pointer; transition: background 0.2s; }
+            .tts-speakable { 
+                cursor: pointer; 
+                transition: background 0.2s; 
+                position: relative; 
+                user-select: none; /* Prevent text selection during long press */
+                -webkit-tap-highlight-color: transparent;
+                -webkit-touch-callout: none;
+            }
             .tts-speakable:hover { background: rgba(255, 255, 255, 0.1); }
+            .is-bookmarked::before {
+                content: '🔖';
+                position: absolute;
+                left: -1.25rem;
+                top: 0;
+                font-size: 0.8rem;
+                opacity: 0.8;
+            }
             .tts-active { 
                 background-color: rgba(255, 235, 59, 1) !important;
                 border-radius: 4px; 

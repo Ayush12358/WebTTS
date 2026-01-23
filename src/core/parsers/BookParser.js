@@ -1,6 +1,6 @@
 /**
  * Base class for Book Parsers
- * Extend this class to add support for new book formats (PDF, MOBI, TXT, etc.)
+ * Extend this class to add support for new book formats (EPUB, MOBI, TXT, etc.)
  */
 export class BookParser {
     constructor() {

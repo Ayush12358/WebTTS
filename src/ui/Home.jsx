@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
-import { Upload, Book, Trash2, FileText } from 'lucide-react';
+import { Upload, Book, Trash2, FileText, Clock } from 'lucide-react';
 import { ThemeToggle } from './components/ThemeToggle';
 
 export function Home() {
@@ -12,6 +12,7 @@ export function Home() {
     const [showPasteModal, setShowPasteModal] = useState(false);
     const [pastedText, setPastedText] = useState("");
     const [pastedTitle, setPastedTitle] = useState("");
+    const [ttsRate, setTtsRate] = useState(1.0);
 
     const refreshBooks = async () => {
         const list = await bookStore.getBooks();
@@ -25,7 +26,26 @@ export function Home() {
         // Get supported extensions from store (which gets them from parsers)
         const exts = bookStore.getSupportedExtensions();
         setSupportedExts(exts);
+
+        const loadSettings = async () => {
+            const settings = await bookStore.getSettings('ttsConfig');
+            if (settings?.rate) setTtsRate(settings.rate);
+        };
+        loadSettings();
     }, []);
+
+    const getReadingTime = (words) => {
+        if (!words) return null;
+        const wpm = 200 * ttsRate;
+        const totalMins = Math.ceil(words / wpm);
+
+        if (totalMins >= 60) {
+            const hours = Math.floor(totalMins / 60);
+            const mins = totalMins % 60;
+            return `${hours}h ${mins}m read`;
+        }
+        return `${totalMins} min read`;
+    };
 
     const handleFile = async (file) => {
         if (!file) return;
@@ -112,24 +132,82 @@ export function Home() {
                         onClick={() => navigate(`/book/${book.id}/toc`)}
                         style={{
                             background: 'var(--bg-secondary, rgba(0,0,0,0.05))',
-                            borderRadius: '8px',
-                            padding: '1rem',
+                            borderRadius: '12px',
+                            padding: '0.75rem',
                             cursor: 'pointer',
                             position: 'relative',
                             aspectRatio: '0.7',
                             display: 'flex',
                             flexDirection: 'column',
-                            justifyContent: 'center',
+                            justifyContent: 'flex-start',
                             alignItems: 'center',
                             textAlign: 'center',
-                            border: '1px solid transparent',
-                            transition: 'all 0.2s'
+                            border: '1px solid rgba(128,128,128,0.1)',
+                            transition: 'all 0.2s',
+                            overflow: 'hidden'
                         }}
                         className="book-card"
                     >
-                        <Book size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>{book.title || 'Unknown Title'}</h4>
-                        <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>{book.author || 'Unknown Author'}</p>
+                        {book.cover ? (
+                            <img
+                                src={book.cover}
+                                alt={book.title}
+                                style={{
+                                    width: '100%',
+                                    height: '65%',
+                                    objectFit: 'cover',
+                                    borderRadius: '8px',
+                                    marginBottom: '0.75rem',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                                }}
+                            />
+                        ) : (
+                            <div style={{
+                                height: '65%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '100%',
+                                background: 'rgba(0,0,0,0.03)',
+                                borderRadius: '8px',
+                                marginBottom: '0.75rem'
+                            }}>
+                                <Book size={48} style={{ opacity: 0.1 }} />
+                            </div>
+                        )}
+                        <h4 style={{
+                            margin: '0 0 0.25rem 0',
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                        }}>{book.title || 'Unknown Title'}</h4>
+                        <p style={{
+                            margin: 0,
+                            fontSize: '0.75rem',
+                            opacity: 0.6,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            width: '90%'
+                        }}>{book.author || 'Unknown Author'}</p>
+
+                        {(book.totalWords || (book.toc && book.toc.reduce((a, c) => a + (c.words || 0), 0))) > 0 && (
+                            <div style={{
+                                marginTop: '0.75rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                color: 'var(--accent-color, #3B82F6)',
+                                fontWeight: '500',
+                                fontSize: '0.75rem'
+                            }}>
+                                <Clock size={14} />
+                                {getReadingTime(book.totalWords || book.toc.reduce((a, c) => a + (c.words || 0), 0))}
+                            </div>
+                        )}
 
                         <button
                             onClick={(e) => deleteBook(e, book.id)}

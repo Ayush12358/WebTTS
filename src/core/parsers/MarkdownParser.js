@@ -33,6 +33,12 @@ export class MarkdownParser extends BookParser {
         lines.forEach((line, index) => {
             const match = line.match(/^(#{1,3})\s+(.+)$/);
             if (match) {
+                // If there's a previous chapter, finalize its word count
+                if (toc.length > 0) {
+                    const prev = toc[toc.length - 1];
+                    const chapterText = lines.slice(prev.lineIndex, index).join(' ');
+                    prev.words = chapterText.trim().split(/\s+/).filter(w => w.length > 0).length;
+                }
                 toc.push({
                     title: match[2],
                     href: `chapter-${chapterIndex++}`,
@@ -41,9 +47,17 @@ export class MarkdownParser extends BookParser {
             }
         });
 
+        // Finalize the last chapter's word count
+        if (toc.length > 0) {
+            const last = toc[toc.length - 1];
+            const chapterText = lines.slice(last.lineIndex).join(' ');
+            last.words = chapterText.trim().split(/\s+/).filter(w => w.length > 0).length;
+        }
+
         // If no headers, create one single chapter
         if (toc.length === 0) {
-            toc.push({ title: 'Full Text', href: 'chapter-0', lineIndex: 0 });
+            const totalWords = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+            toc.push({ title: 'Full Text', href: 'chapter-0', lineIndex: 0, words: totalWords });
         }
 
         return {

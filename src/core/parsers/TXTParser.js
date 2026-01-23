@@ -27,11 +27,15 @@ export class TXTParser extends BookParser {
         const toc = [];
         for (let i = 0; i < text.length; i += chunkSize) {
             const pageNum = Math.floor(i / chunkSize) + 1;
+            const content = text.substring(i, i + chunkSize);
+            const wordCount = content.trim().split(/\s+/).length;
+
             toc.push({
                 title: `Part ${pageNum}`,
                 href: `part-${pageNum}`,
                 start: i,
-                end: i + chunkSize
+                end: i + chunkSize,
+                words: wordCount
             });
         }
 
