@@ -5,7 +5,6 @@ import { Settings as SettingsIcon, X, Key } from 'lucide-react';
 export function Settings({ config, onConfigChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [voiceList, setVoiceList] = useState([]);
-    const [showApiConfig, setShowApiConfig] = useState(false);
     const [apiKeys, setApiKeys] = useState({
         googleCloud: localStorage.getItem('googleCloudTTSApiKey') || ''
     });
@@ -13,20 +12,27 @@ export function Settings({ config, onConfigChange }) {
     const availableEngines = getAvailableEngines();
     const currentEngineInfo = availableEngines.find(e => e.id === config.engineId);
 
-
-
     useEffect(() => {
+        const checkEngine = () => {
+            if (!engines[config.engineId]) {
+                console.warn(`Stored engine "${config.engineId}" no longer available. Falling back to webSpeech.`);
+                onConfigChange({ ...config, engineId: 'webSpeech', voiceId: '' });
+            }
+        };
+
         const loadVoices = async () => {
             const engine = engines[config.engineId];
             if (engine) {
                 const voices = await engine.getVoices();
                 // Filter for English only
                 const englishVoices = voices.filter(v =>
-                    v.lang && (v.lang.toLowerCase().startsWith('en') || v.id === 'setup_required' || v.id === 'error' || v.id === 'unavailable')
+                    v.lang && (v.lang.toLowerCase().startsWith('en') || v.id === 'setup_required' || v.id === 'error' || v.id === 'unavailable' || v.id === 'default')
                 );
                 setVoiceList(englishVoices.length > 0 ? englishVoices : voices);
             }
         };
+
+        checkEngine();
         loadVoices();
     }, [config.engineId, apiKeys]);
 
@@ -52,8 +58,6 @@ export function Settings({ config, onConfigChange }) {
         // Reload voices
         onConfigChange({ ...config });
     };
-
-
 
     if (!isOpen) {
         return (
@@ -119,10 +123,6 @@ export function Settings({ config, onConfigChange }) {
                             </button>
                         </div>
                     )}
-
-
-
-
                 </div>
             )}
 

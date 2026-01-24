@@ -1,7 +1,7 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Clock } from 'lucide-react';
 
-export function Controls({ playing, onPlayPause, onNext, onPrev }) {
+export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
     return (
         <div className="controls" style={{
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem',
@@ -26,6 +26,20 @@ export function Controls({ playing, onPlayPause, onNext, onPrev }) {
             <button onClick={onNext} style={{ background: 'transparent', color: 'var(--text-primary)' }}>
                 <SkipForward />
             </button>
+
+            {timeLeft && (
+                <div style={{
+                    position: 'absolute',
+                    right: '1rem',
+                    fontSize: '0.8rem',
+                    opacity: 0.6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                }}>
+                    <Clock size={14} /> {timeLeft} left
+                </div>
+            )}
         </div>
     );
 }

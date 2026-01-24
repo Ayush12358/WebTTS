@@ -54,12 +54,12 @@ export class GoogleCloudTTSEngine extends TTSEngine {
 
             const data = await response.json();
 
-            // Filter for English voices and format
+            // Filter for English voices and use original names
             this.voiceList = data.voices
                 .filter(v => v.languageCodes.some(l => l.startsWith('en')))
                 .map(v => ({
                     id: v.name,
-                    name: `${v.name.split('-').slice(2).join(' ')} (${v.ssmlGender})`,
+                    name: v.name,
                     lang: v.languageCodes[0],
                     source: 'Google Cloud'
                 }));

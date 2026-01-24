@@ -9,6 +9,6 @@ export const engines = {
 export const getAvailableEngines = () => {
     return [
         { id: 'webSpeech', name: 'System TTS', requiresKey: false },
-        { id: 'googleCloud', name: 'Google Cloud TTS (4M/month)', requiresKey: true }
+        { id: 'googleCloud', name: 'Google Cloud TTS (Neural)', requiresKey: true }
     ];
 };

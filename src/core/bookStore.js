@@ -186,5 +186,23 @@ export const bookStore = {
      */
     saveSettings: async (key, value) => {
         await settingsStore.setItem(key, value);
+    },
+
+    /**
+     * Save reading progress
+     */
+    saveProgress: async (bookId, spineIndex, nodeIndex) => {
+        const meta = await metaStore.getItem(bookId);
+        if (meta) {
+            await metaStore.setItem(bookId, { ...meta, lastProgress: { spineIndex, nodeIndex } });
+        }
+    },
+
+    /**
+     * Get reading progress
+     */
+    getProgress: async (bookId) => {
+        const meta = await metaStore.getItem(bookId);
+        return meta?.lastProgress || null;
     }
 };

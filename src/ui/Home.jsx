@@ -34,9 +34,10 @@ export function Home() {
         loadSettings();
     }, []);
 
-    const getReadingTime = (words) => {
+    const getReadingTime = (words, rate = null) => {
         if (!words) return null;
-        const wpm = 200 * ttsRate;
+        const currentRate = rate || ttsRate;
+        const wpm = 200 * currentRate;
         const totalMins = Math.ceil(words / wpm);
 
         if (totalMins >= 60) {
@@ -45,6 +46,39 @@ export function Home() {
             return `${hours}h ${mins}m read`;
         }
         return `${totalMins} min read`;
+    };
+
+    const getRemainingTime = (book) => {
+        if (!book.toc || !book.lastProgress) return null;
+
+        const { spineIndex, nodeIndex } = book.lastProgress;
+        let remainingWords = 0;
+
+        // Current chapter partial (estimation since we don't know total nodes here)
+        // We'll just assume half the chapter is read if there is progress, 
+        // OR better, we just skip current and count future + current total/2
+        const currentChapter = book.toc[spineIndex];
+        if (currentChapter) {
+            // Estimate remaining in current chapter as 50% if we don't have node count
+            // Actually, for Home view, a simpler estimate is fine.
+            remainingWords += (currentChapter.words || 0) * 0.5;
+        }
+
+        for (let i = spineIndex + 1; i < book.toc.length; i++) {
+            remainingWords += (book.toc[i].words || 0);
+        }
+
+        const wpm = 200 * ttsRate;
+        const totalMins = Math.ceil(remainingWords / wpm);
+
+        if (totalMins <= 0) return 'Finished';
+
+        if (totalMins >= 60) {
+            const h = Math.floor(totalMins / 60);
+            const m = totalMins % 60;
+            return `${h}h ${m}m left`;
+        }
+        return `${totalMins}m left`;
     };
 
     const handleFile = async (file) => {
@@ -206,6 +240,17 @@ export function Home() {
                             }}>
                                 <Clock size={14} />
                                 {getReadingTime(book.totalWords || book.toc.reduce((a, c) => a + (c.words || 0), 0))}
+                            </div>
+                        )}
+
+                        {book.lastProgress && (
+                            <div style={{
+                                marginTop: '0.25rem',
+                                fontSize: '0.7rem',
+                                opacity: 0.4,
+                                fontStyle: 'italic'
+                            }}>
+                                {getRemainingTime(book)}
                             </div>
                         )}
 

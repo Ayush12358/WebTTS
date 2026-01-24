@@ -76,12 +76,25 @@ export function Player() {
 
                 // Resolve initial location
                 let spineIndex = 0;
+                let nodeIndex = 0;
+
                 if (cfi && cfi !== 'start') {
                     // Cfi support is EPUB specific for now, but index works for others
                     spineIndex = parseInt(cfi) || 0;
+                    const nodeParam = searchParams.get('node');
+                    if (nodeParam) nodeIndex = parseInt(nodeParam);
+                } else {
+                    // Load last progress
+                    const lastProgress = await bookStore.getProgress(id);
+                    if (lastProgress) {
+                        spineIndex = lastProgress.spineIndex;
+                        nodeIndex = lastProgress.nodeIndex;
+                    }
                 }
+
                 setCurrentSpineIndex(spineIndex);
-                loadChapter(bookParser, parsed.instance, spineIndex);
+                setCurrentIndex(nodeIndex);
+                loadChapter(bookParser, parsed.instance, spineIndex, nodeIndex);
 
             } catch (err) {
                 console.error("Error loading book:", err);
@@ -104,7 +117,7 @@ export function Player() {
     };
 
     // Load Chapter Content
-    const loadChapter = async (currentParser, bookInstance, index) => {
+    const loadChapter = async (currentParser, bookInstance, index, jumpToNode = -1) => {
         setLoading(true);
         setPlaying(false);
         try {
@@ -128,6 +141,11 @@ export function Player() {
 
             setChapterContent(tempDiv.innerHTML);
             setLoading(false);
+
+            // If we have a jumpToNode, wait for render then jump
+            if (jumpToNode >= 0) {
+                // The useEffect for chapterContent will handle the scrolling
+            }
         } catch (e) {
             console.error("Failed to load chapter", e);
             setError("Failed to load chapter.");
@@ -158,9 +176,9 @@ export function Player() {
             if (target) target.node.classList.add('is-bookmarked');
         });
 
-        // Jump to bookmarked line if present in URL
-        const nodeToJump = searchParams.get('node');
-        if (nodeToJump !== null && items.length > 0) {
+        // Jump to bookmarked line or saved progress
+        const nodeToJump = searchParams.get('node') || currentIndex;
+        if (nodeToJump !== null && nodeToJump >= 0 && items.length > 0) {
             const idx = parseInt(nodeToJump);
             const target = items.find(n => n.index === idx);
             if (target) {
@@ -168,11 +186,50 @@ export function Player() {
                     target.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     target.node.classList.add('tts-active');
                     // Remove highlight after a delay so it's not permanent unless playing
-                    setTimeout(() => target.node.classList.remove('tts-active'), 2000);
+                    if (!playingRef.current) {
+                        setTimeout(() => target.node.classList.remove('tts-active'), 2000);
+                    }
                 }, 100);
             }
         }
     }, [chapterContent, searchParams, bookmarks]);
+
+    // Save progress when spine/node changes
+    useEffect(() => {
+        if (id && currentSpineIndex >= 0 && currentIndex >= 0) {
+            bookStore.saveProgress(id, currentSpineIndex, currentIndex);
+        }
+    }, [id, currentSpineIndex, currentIndex]);
+
+    const calculateTimeLeft = () => {
+        if (!bookMeta?.toc || !ttsConfig.rate) return null;
+
+        let remainingWords = 0;
+
+        // 1. Current chapter remaining
+        const currentChapter = bookMeta.toc[currentSpineIndex];
+        if (currentChapter && currentNodes.current.length > 0) {
+            const progress = (currentIndex + 1) / currentNodes.current.length;
+            remainingWords += currentChapter.words * (1 - progress);
+        }
+
+        // 2. Future chapters
+        for (let i = currentSpineIndex + 1; i < bookMeta.toc.length; i++) {
+            remainingWords += (bookMeta.toc[i].words || 0);
+        }
+
+        const wpm = 200 * ttsConfig.rate;
+        const totalMins = Math.ceil(remainingWords / wpm);
+
+        if (totalMins >= 60) {
+            const h = Math.floor(totalMins / 60);
+            const m = totalMins % 60;
+            return `${h}h ${m}m`;
+        }
+        return `${totalMins}m`;
+    };
+
+    const timeLeft = calculateTimeLeft();
 
     // Navigation
     const goToNextChapter = () => {
@@ -487,6 +544,7 @@ export function Player() {
                     onPlayPause={togglePlay}
                     onNext={() => playFromIndex(currentIndex + 1)}
                     onPrev={() => playFromIndex(currentIndex - 1)}
+                    timeLeft={timeLeft}
                 />
             </div>
 

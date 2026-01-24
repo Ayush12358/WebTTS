@@ -79,8 +79,38 @@ export function TOC() {
         return `${totalMins} min read`;
     };
 
+    const getRemainingTime = (metadata) => {
+        if (!metadata.toc || !metadata.lastProgress) return null;
+
+        const { spineIndex } = metadata.lastProgress;
+        let remainingWords = 0;
+
+        // Current chapter partial (estimation)
+        const currentChapter = metadata.toc[spineIndex];
+        if (currentChapter) {
+            remainingWords += (currentChapter.words || 0) * 0.5;
+        }
+
+        for (let i = spineIndex + 1; i < metadata.toc.length; i++) {
+            remainingWords += (metadata.toc[i].words || 0);
+        }
+
+        const wpm = 200 * ttsRate;
+        const totalMins = Math.ceil(remainingWords / wpm);
+
+        if (totalMins <= 0) return 'Finished';
+
+        if (totalMins >= 60) {
+            const h = Math.floor(totalMins / 60);
+            const m = totalMins % 60;
+            return `${h}h ${m}m left`;
+        }
+        return `${totalMins}m left`;
+    };
+
     const totalWords = chapters.reduce((acc, curr) => acc + (curr.words || 0), 0);
     const totalTime = getReadingTime(totalWords);
+    const timeLeft = meta ? getRemainingTime(meta) : null;
 
     const deleteBookmark = async (e, bookmarkId) => {
         e.stopPropagation();
@@ -117,6 +147,20 @@ export function TOC() {
                         fontSize: '0.9rem'
                     }}>
                         <Clock size={16} /> Total: {totalTime}
+                    </div>
+                )}
+                {timeLeft && (
+                    <div style={{
+                        marginTop: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        color: 'var(--accent-color, #3B82F6)',
+                        opacity: 0.6,
+                        fontSize: '0.8rem',
+                        fontStyle: 'italic'
+                    }}>
+                        Remaining: {timeLeft}
                     </div>
                 )}
             </div>
