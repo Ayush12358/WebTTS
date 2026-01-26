@@ -24,6 +24,16 @@ export class TTSEngine {
         throw new Error("Method 'speak' must be implemented.");
     }
 
+    /**
+     * Prefetch audio for text
+     * @param {string} text 
+     * @param {object} options 
+     * @returns {Promise<HTMLAudioElement|null>}
+     */
+    async prefetch(text, options = {}) {
+        return null;
+    }
+
     stop() { }
     pause() { }
     resume() { }

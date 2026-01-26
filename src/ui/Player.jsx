@@ -41,6 +41,9 @@ export function Player() {
     const playingRef = useRef(false);
     useEffect(() => { playingRef.current = playing; }, [playing]);
 
+    // Prefetch Ref
+    const prefetchRef = useRef({ index: -1, promise: null });
+
     // Load Book
     useEffect(() => {
         const loadBook = async () => {
@@ -288,10 +291,34 @@ export function Player() {
         if (!speechEngine) return;
 
         try {
+            // Check for prefetch
+            let audioObject = null;
+            if (prefetchRef.current.index === index && prefetchRef.current.promise) {
+                console.log('Resolving prefetch for index:', index);
+                audioObject = await prefetchRef.current.promise;
+                prefetchRef.current = { index: -1, promise: null }; // Consume
+            }
+
+            // Trigger NEXT prefetch immediately
+            const nextIndex = index + 1;
+            if (nextIndex < currentNodes.current.length) {
+                const nextText = currentNodes.current[nextIndex].text;
+                console.log('Prefetching next index:', nextIndex);
+                prefetchRef.current = {
+                    index: nextIndex,
+                    promise: speechEngine.prefetch(nextText, {
+                        voiceId: ttsConfig.voiceId,
+                        rate: ttsConfig.rate,
+                        pitch: ttsConfig.pitch
+                    })
+                };
+            }
+
             await speechEngine.speak(item.text, {
                 voiceId: ttsConfig.voiceId,
                 rate: ttsConfig.rate,
-                pitch: ttsConfig.pitch
+                pitch: ttsConfig.pitch,
+                audioObject: audioObject // Pass preloaded audio
             }, {
                 onEnd: () => {
                     if (playingRef.current) {

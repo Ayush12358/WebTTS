@@ -11,19 +11,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "edge-tts-client": "^1.0.2",
     "epubjs": "^0.3.93",
     "espeak-ng": "^1.0.2",
     "localforage": "^1.10.0",
     "lucide-react": "^0.562.0",
     "marked": "^17.0.1",
-    "msedge-tts": "^2.0.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.12.0",
     "speakit-js": "^1.0.2",
     "uuid": "^13.0.0",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^1.2.0",
+    "ws": "^8.19.0",
+    "xml-escape": "^1.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

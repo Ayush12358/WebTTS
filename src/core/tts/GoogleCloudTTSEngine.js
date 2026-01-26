@@ -76,21 +76,14 @@ export class GoogleCloudTTSEngine extends TTSEngine {
         }
     }
 
-    async speak(text, options = {}, callbacks = {}) {
-        this.stop();
-
+    async prefetch(text, options = {}) {
         const apiKey = this.getApiKey();
-        if (!apiKey) {
-            if (callbacks.onError) callbacks.onError(new Error('Google Cloud API key not set'));
-            return;
-        }
+        if (!apiKey) return null;
 
         const voiceId = options.voiceId || 'en-US-Neural2-C';
         const rate = options.rate || 1.0;
 
         try {
-            if (callbacks.onStart) callbacks.onStart();
-
             const response = await fetch(
                 `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
                 {
@@ -110,10 +103,7 @@ export class GoogleCloudTTSEngine extends TTSEngine {
                 }
             );
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error?.message || 'TTS request failed');
-            }
+            if (!response.ok) return null;
 
             const data = await response.json();
             const audioContent = data.audioContent;
@@ -122,11 +112,77 @@ export class GoogleCloudTTSEngine extends TTSEngine {
             const audioBlob = await fetch(`data:audio/mp3;base64,${audioContent}`).then(r => r.blob());
             const audioUrl = URL.createObjectURL(audioBlob);
 
-            this.audio = new Audio(audioUrl);
+            const audio = new Audio(audioUrl);
+            audio.preload = 'auto'; // Important
+            // Attach URL to revoke later if needed
+            audio._blobUrl = audioUrl;
+            return audio;
+
+        } catch (e) {
+            console.error('Google Cloud TTS prefetch error:', e);
+            return null;
+        }
+    }
+
+    async speak(text, options = {}, callbacks = {}) {
+        this.stop();
+
+        const apiKey = this.getApiKey();
+        if (!apiKey) {
+            if (callbacks.onError) callbacks.onError(new Error('Google Cloud API key not set'));
+            return;
+        }
+
+        const voiceId = options.voiceId || 'en-US-Neural2-C';
+        const rate = options.rate || 1.0;
+
+        try {
+            if (callbacks.onStart) callbacks.onStart();
+
+            if (options.audioObject) {
+                console.log('Using prefetched Google Cloud audio');
+                this.audio = options.audioObject;
+            } else {
+                const response = await fetch(
+                    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            input: { text: text },
+                            voice: {
+                                languageCode: voiceId.substring(0, 5),
+                                name: voiceId
+                            },
+                            audioConfig: {
+                                audioEncoding: 'MP3',
+                                speakingRate: rate
+                            }
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'TTS request failed');
+                }
+
+                const data = await response.json();
+                const audioContent = data.audioContent;
+
+                // Convert base64 to audio
+                const audioBlob = await fetch(`data:audio/mp3;base64,${audioContent}`).then(r => r.blob());
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                this.audio = new Audio(audioUrl);
+                this.audio._blobUrl = audioUrl;
+            }
 
             this.audio.onended = () => {
                 if (callbacks.onEnd) callbacks.onEnd();
-                URL.revokeObjectURL(audioUrl);
+                if (this.audio && this.audio._blobUrl) {
+                    URL.revokeObjectURL(this.audio._blobUrl);
+                }
             };
 
             this.audio.onerror = (e) => {
@@ -145,6 +201,9 @@ export class GoogleCloudTTSEngine extends TTSEngine {
         if (this.audio) {
             this.audio.pause();
             this.audio.currentTime = 0;
+            if (this.audio._blobUrl) {
+                URL.revokeObjectURL(this.audio._blobUrl);
+            }
             this.audio = null;
         }
     }
