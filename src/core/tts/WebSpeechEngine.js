@@ -20,12 +20,14 @@ export class WebSpeechEngine extends TTSEngine {
 
     async getVoices() {
         const voices = window.speechSynthesis.getVoices();
-        return voices.map(v => ({
-            id: v.name, // Using name as ID for WebSpeech as URIs can be tricky. Or v.voiceURI
-            name: v.name,
-            lang: v.lang,
-            source: 'WebSpeech'
-        }));
+        return voices
+            .filter(v => v.lang.startsWith('en'))
+            .map(v => ({
+                id: v.name,
+                name: v.name,
+                lang: v.lang,
+                source: 'WebSpeech'
+            }));
     }
 
     speak(text, options = {}, callbacks = {}) {

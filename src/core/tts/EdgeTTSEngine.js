@@ -16,14 +16,16 @@ export class EdgeTTSEngine extends TTSEngine {
 
     async getVoices() {
         try {
-            const response = await fetch('/edge-tts-voices');
+            const response = await fetch('/api/voices');
             const voices = await response.json();
-            return voices.map(v => ({
-                id: v.ShortName,
-                name: v.FriendlyName || v.ShortName,
-                lang: v.Locale,
-                source: 'Edge TTS'
-            }));
+            return voices
+                .filter(v => v.Locale.startsWith('en-'))
+                .map(v => ({
+                    id: v.ShortName,
+                    name: v.FriendlyName || v.ShortName,
+                    lang: v.Locale,
+                    source: 'Edge TTS'
+                }));
         } catch (e) {
             console.error('Failed to fetch Edge TTS voices:', e);
             return [{
@@ -46,8 +48,8 @@ export class EdgeTTSEngine extends TTSEngine {
                 : `${Math.round((rate - 1) * 100)}%`;
 
             const pitchFormatted = pitch >= 1
-                ? `+${Math.round((pitch - 1) * 100)}Hz`
-                : `${Math.round((pitch - 1) * 100)}Hz`;
+                ? `+${Math.round((pitch - 1) * 100)}%`
+                : `${Math.round((pitch - 1) * 100)}%`;
 
             const params = new URLSearchParams({
                 text: text,
@@ -89,8 +91,8 @@ export class EdgeTTSEngine extends TTSEngine {
                     : `${Math.round((rate - 1) * 100)}%`;
 
                 const pitchFormatted = pitch >= 1
-                    ? `+${Math.round((pitch - 1) * 100)}Hz`
-                    : `${Math.round((pitch - 1) * 100)}Hz`;
+                    ? `+${Math.round((pitch - 1) * 100)}%`
+                    : `${Math.round((pitch - 1) * 100)}%`;
 
                 const params = new URLSearchParams({
                     text: text,

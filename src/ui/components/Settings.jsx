@@ -24,11 +24,7 @@ export function Settings({ config, onConfigChange }) {
             const engine = engines[config.engineId];
             if (engine) {
                 const voices = await engine.getVoices();
-                // Filter for English only
-                const englishVoices = voices.filter(v =>
-                    v.lang && (v.lang.toLowerCase().startsWith('en') || v.id === 'setup_required' || v.id === 'error' || v.id === 'unavailable' || v.id === 'default')
-                );
-                setVoiceList(englishVoices.length > 0 ? englishVoices : voices);
+                setVoiceList(voices);
             }
         };
 

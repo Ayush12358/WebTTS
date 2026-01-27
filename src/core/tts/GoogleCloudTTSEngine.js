@@ -97,7 +97,8 @@ export class GoogleCloudTTSEngine extends TTSEngine {
                         },
                         audioConfig: {
                             audioEncoding: 'MP3',
-                            speakingRate: rate
+                            speakingRate: rate,
+                            pitch: 12 * Math.log2(options.pitch || 1.0)
                         }
                     })
                 }
@@ -156,7 +157,8 @@ export class GoogleCloudTTSEngine extends TTSEngine {
                             },
                             audioConfig: {
                                 audioEncoding: 'MP3',
-                                speakingRate: rate
+                                speakingRate: rate,
+                                pitch: 12 * Math.log2(options.pitch || 1.0)
                             }
                         })
                     }

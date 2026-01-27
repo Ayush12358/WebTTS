@@ -108,6 +108,27 @@ const edgeTtsApiPlugin = () => ({
           res.end(error.message);
           return;
         }
+      } else if (url.pathname === '/api/voices') {
+        try {
+          const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+          const voicesUrl = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=${TRUSTED_CLIENT_TOKEN}`;
+          const response = await fetch(voicesUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
+              'Origin': 'https://edge.microsoft.com',
+              'Referer': 'https://edge.microsoft.com'
+            }
+          });
+          const data = await response.json();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(data));
+          return;
+        } catch (error) {
+          console.error('[API] Voices Error:', error);
+          if (!res.headersSent) res.writeHead(500);
+          res.end(error.message);
+          return;
+        }
       }
       next();
     });
@@ -135,18 +156,6 @@ export default defineConfig({
     edgeTtsApiPlugin()
   ],
   server: {
-    proxy: {
-      '/edge-tts-voices': {
-        target: 'https://speech.platform.bing.com',
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/edge-tts-voices/, '/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4'),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
-          'Origin': 'https://edge.microsoft.com',
-          'Referer': 'https://edge.microsoft.com'
-        }
-      }
-    }
+    proxy: {}
   }
 });
