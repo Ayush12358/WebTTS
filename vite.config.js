@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import escape from 'xml-escape';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 /**
  * Robust Edge TTS Synthesis Logic (Definitive Jan 2026 Bypass)

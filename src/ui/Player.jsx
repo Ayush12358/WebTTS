@@ -7,6 +7,7 @@ import { engines } from '../core/tts';
 import { Settings } from './components/Settings';
 import { Controls } from './components/Controls';
 import { ThemeToggle } from './components/ThemeToggle';
+import { PDFPageView } from './components/PDFPageView';
 
 export function Player() {
     const { id, cfi } = useParams();
@@ -17,6 +18,7 @@ export function Player() {
     const [error, setError] = useState(null);
     const [chapterContent, setChapterContent] = useState('');
     const [currentSpineIndex, setCurrentSpineIndex] = useState(0);
+    const [nativePdfPayload, setNativePdfPayload] = useState(null);
 
     const contentRef = useRef(null); // Ref to the container div
 
@@ -126,28 +128,36 @@ export function Player() {
         try {
             const result = await currentParser.getChapterContent(bookInstance, index);
 
-            // Pre-process for TTS in a temporary container
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = result.html;
+            if (result.isPdfNative) {
+                // Bypass the HTML extraction entirely
+                setChapterContent('');
+                setNativePdfPayload(result);
+                // We don't set loading false yet, the PDFPageView will call a callback when done
+            } else {
+                setNativePdfPayload(null);
+                // Pre-process for TTS in a temporary container
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = result.html;
 
-            const elements = tempDiv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, span');
-            const items = [];
-            elements.forEach((el) => {
-                const text = el.innerText.trim();
-                // Avoid nested speakables
-                if (text && !el.closest('.tts-speakable')) {
-                    el.setAttribute('data-tts-index', items.length);
-                    el.classList.add('tts-speakable');
-                    items.push({ text, id: items.length });
+                const elements = tempDiv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, span');
+                const items = [];
+                elements.forEach((el) => {
+                    const text = el.innerText.trim();
+                    // Avoid nested speakables
+                    if (text && !el.closest('.tts-speakable')) {
+                        el.setAttribute('data-tts-index', items.length);
+                        el.classList.add('tts-speakable');
+                        items.push({ text, id: items.length });
+                    }
+                });
+
+                setChapterContent(tempDiv.innerHTML);
+                setLoading(false);
+
+                // If we have a jumpToNode, wait for render then jump
+                if (jumpToNode >= 0) {
+                    // The useEffect for chapterContent will handle the scrolling
                 }
-            });
-
-            setChapterContent(tempDiv.innerHTML);
-            setLoading(false);
-
-            // If we have a jumpToNode, wait for render then jump
-            if (jumpToNode >= 0) {
-                // The useEffect for chapterContent will handle the scrolling
             }
         } catch (e) {
             console.error("Failed to load chapter", e);
@@ -159,6 +169,7 @@ export function Player() {
     // Post-Render Processing: Find Nodes
     useEffect(() => {
         if (!contentRef.current) return;
+        if (loading) return; // Wait until PDF or HTML is fully loaded
 
         const container = contentRef.current;
         const elements = container.querySelectorAll('.tts-speakable');
@@ -195,7 +206,7 @@ export function Player() {
                 }, 100);
             }
         }
-    }, [chapterContent, searchParams, bookmarks]);
+    }, [chapterContent, nativePdfPayload, loading, searchParams, bookmarks]);
 
     // Save progress when spine/node changes
     useEffect(() => {
@@ -540,7 +551,17 @@ export function Player() {
                     ← Previous
                 </button>
 
-                <div ref={contentRef} onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: chapterContent }} />
+                {nativePdfPayload ? (
+                    <div ref={contentRef} onClick={handleContentClick} style={{ display: 'flex', justifyContent: 'center' }}>
+                        <PDFPageView
+                            pdfData={nativePdfPayload.binaryData}
+                            pageIndex={nativePdfPayload.pageIndex}
+                            onLoaded={() => setLoading(false)}
+                        />
+                    </div>
+                ) : (
+                    <div ref={contentRef} onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: chapterContent }} />
+                )}
 
                 <button
                     onClick={goToNextChapter}

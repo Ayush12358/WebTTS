@@ -86,7 +86,7 @@ export function Home() {
 
         const ext = file.name.split('.').pop().toLowerCase();
         // Check if extension is supported
-        if (!supportedExts.includes(ext) && !file.type.includes('epub')) { // Keep epub type check as fallback
+        if (!supportedExts.includes(ext) && !file.type.includes('epub') && !file.type.includes('pdf')) {
             alert(`Please select a supported file (${supportedExts.join(', ')}).`);
             return;
         }
