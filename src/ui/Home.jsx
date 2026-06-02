@@ -1,13 +1,18 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
+import { canStoreBook, formatBytes } from '../core/quotaManager';
 import { Upload, Book, Trash2, FileText, Clock } from 'lucide-react';
 import { ThemeToggle } from './components/ThemeToggle';
+import { useToast } from './components/Toast';
+import { Skeleton } from './components/Skeleton';
 
 export function Home() {
     const navigate = useNavigate();
+    const { showToast } = useToast();
     const [isDragging, setIsDragging] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
     const [books, setBooks] = useState([]);
     const [showPasteModal, setShowPasteModal] = useState(false);
     const [pastedText, setPastedText] = useState("");
@@ -17,6 +22,7 @@ export function Home() {
     const refreshBooks = async () => {
         const list = await bookStore.getBooks();
         setBooks(list);
+        setInitialLoading(false);
     };
 
     const [supportedExts, setSupportedExts] = useState(['epub']);
@@ -93,12 +99,26 @@ export function Home() {
 
         setLoading(true);
         try {
+            // Pre-flight quota check
+            const quotaCheck = await canStoreBook(file.size);
+            if (quotaCheck.reason) {
+                showToast(quotaCheck.reason, quotaCheck.ok ? 'warning' : 'error');
+            }
+            if (!quotaCheck.ok) {
+                setLoading(false);
+                return;
+            }
+
             const buffer = await file.arrayBuffer();
             const id = await bookStore.addBook(buffer, file.name);
             navigate(`/book/${id}/toc`);
         } catch (err) {
             console.error(err);
-            alert('Failed to load book');
+            if (err.isQuotaError) {
+                showToast('Storage is full! Delete unused books to make space.', 'error');
+            } else {
+                showToast('Failed to load book. The file may be corrupted.', 'error');
+            }
             setLoading(false);
         }
     };
@@ -117,7 +137,11 @@ export function Home() {
             navigate(`/book/${id}/toc`);
         } catch (err) {
             console.error(err);
-            alert('Failed to save pasted text');
+            if (err.isQuotaError) {
+                showToast('Storage is full! Delete unused books to make space.', 'error');
+            } else {
+                showToast('Failed to save pasted text.', 'error');
+            }
             setLoading(false);
         }
     };
@@ -160,7 +184,26 @@ export function Home() {
                 gap: '2rem',
                 marginBottom: '3rem'
             }}>
-                {books.map(book => (
+                {initialLoading ? (
+                    Array.from({ length: 4 }, (_, i) => (
+                        <div key={i} style={{
+                            background: 'var(--bg-secondary, rgba(0,0,0,0.05))',
+                            borderRadius: '12px',
+                            padding: '0.75rem',
+                            aspectRatio: '0.7',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'flex-start',
+                            alignItems: 'center'
+                        }}>
+                            <Skeleton height="130px" style={{ marginBottom: '0.75rem', borderRadius: '8px' }} />
+                            <Skeleton width="80%" height="0.9rem" style={{ marginBottom: '0.4rem' }} />
+                            <Skeleton width="60%" height="0.75rem" style={{ marginBottom: '0.75rem' }} />
+                            <Skeleton width="100px" height="0.75rem" />
+                        </div>
+                    ))
+                ) : (
+                    books.map(book => (
                     <div
                         key={book.id}
                         onClick={() => navigate(`/book/${book.id}/toc`)}
@@ -269,7 +312,7 @@ export function Home() {
                             <Trash2 size={16} />
                         </button>
                     </div>
-                ))}
+                )))}
             </div>
 
             <div style={{ display: 'flex', gap: '1rem' }}>
@@ -293,7 +336,16 @@ export function Home() {
                     }}
                 >
                     <Upload size={32} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                    <p style={{ margin: 0 }}>{loading ? 'Processing...' : `Add a book (${supportedExts.join(', ').toUpperCase()})`}</p>
+                    <p style={{ margin: 0 }}>
+                        {loading ? (
+                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                <Skeleton width="16px" height="16px" style={{ borderRadius: '50%', display: 'inline-block', marginBottom: 0 }} />
+                                Processing...
+                            </span>
+                        ) : (
+                            `Add a book (${supportedExts.join(', ').toUpperCase()})`
+                        )}
+                    </p>
                     <input
                         type="file"
                         id="file-input"

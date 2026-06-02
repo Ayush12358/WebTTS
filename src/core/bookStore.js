@@ -1,5 +1,6 @@
 import localforage from 'localforage';
 import { getParserForFile, getSupportedExtensions } from './parsers';
+import { isQuotaError, getStorageEstimate } from './quotaManager';
 
 // Configure instances
 const booksStore = localforage.createInstance({
@@ -80,6 +81,12 @@ export const bookStore = {
 
             return id;
         } catch (e) {
+            if (isQuotaError(e)) {
+                console.error("Storage quota exceeded", e);
+                const err = new Error('Storage is full. Please delete unused books to free up space.');
+                err.isQuotaError = true;
+                throw err;
+            }
             console.error("Failed to add book", e);
             throw e;
         }
@@ -204,5 +211,21 @@ export const bookStore = {
     getProgress: async (bookId) => {
         const meta = await metaStore.getItem(bookId);
         return meta?.lastProgress || null;
+    },
+
+    /**
+     * Get current storage usage estimate
+     */
+    getStorageUsage: async () => {
+        return await getStorageEstimate();
+    },
+
+    /**
+     * Clear all books, metadata, and bookmarks from storage
+     */
+    clearAllBooks: async () => {
+        await booksStore.clear();
+        await metaStore.clear();
+        await bookmarksStore.clear();
     }
 };

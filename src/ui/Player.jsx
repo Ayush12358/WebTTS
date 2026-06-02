@@ -8,6 +8,9 @@ import { Settings } from './components/Settings';
 import { Controls } from './components/Controls';
 import { ThemeToggle } from './components/ThemeToggle';
 import { PDFPageView } from './components/PDFPageView';
+import { BookmarkPanel } from './components/BookmarkPanel';
+import { Skeleton } from './components/Skeleton';
+import { Bookmark } from 'lucide-react';
 
 export function Player() {
     const { id, cfi } = useParams();
@@ -24,6 +27,7 @@ export function Player() {
 
     const [playing, setPlaying] = useState(false);
     const [bookmarks, setBookmarks] = useState([]);
+    const [showBookmarks, setShowBookmarks] = useState(false);
 
     const [ttsConfig, setTtsConfig] = useState({
         engineId: 'webSpeech',
@@ -45,6 +49,9 @@ export function Player() {
 
     // Prefetch Ref
     const prefetchRef = useRef({ index: -1, promise: null });
+
+    // Auto-scroll dedup ref
+    const lastScrolledIndex = useRef(-1);
 
     // Load Book
     useEffect(() => {
@@ -252,7 +259,7 @@ export function Player() {
         if (next !== null) {
             setCurrentSpineIndex(next);
             loadChapter(parser, book, next);
-            window.scrollTo(0, 0);
+            contentRef.current?.parentElement?.scrollTo(0, 0);
         }
     };
 
@@ -262,7 +269,7 @@ export function Player() {
         if (prev !== null) {
             setCurrentSpineIndex(prev);
             loadChapter(parser, book, prev);
-            window.scrollTo(0, 0);
+            contentRef.current?.parentElement?.scrollTo(0, 0);
         }
     };
 
@@ -292,10 +299,21 @@ export function Player() {
         document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
         item.node.classList.add('tts-active');
 
-        const rect = item.node.getBoundingClientRect();
-        const inView = (rect.top >= 0 && rect.bottom <= window.innerHeight);
-        if (!inView) {
-            item.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Auto-scroll: only if not already scrolled to this index
+        if (lastScrolledIndex.current !== index) {
+            lastScrolledIndex.current = index;
+            const container = contentRef.current?.parentElement;
+            const containerRect = container ? container.getBoundingClientRect() : null;
+            const rect = item.node.getBoundingClientRect();
+
+            // Check if element is visible within the scroll container, not the window
+            const inView = containerRect
+                ? (rect.top >= containerRect.top && rect.bottom <= containerRect.bottom)
+                : (rect.top >= 0 && rect.bottom <= window.innerHeight);
+
+            if (!inView) {
+                item.node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
 
         const speechEngine = engines[ttsConfig.engineId];
@@ -450,10 +468,19 @@ export function Player() {
     const lastPointerPos = useRef({ x: 0, y: 0 });
     const isLongPress = useRef(false);
 
+    // Swipe tracking
+    const swipeStart = useRef({ x: 0, y: 0, active: false });
+    const isVerticalScroll = useRef(false);
+    const SWIPE_THRESHOLD = 50; // min horizontal px to trigger swipe
+
     const handlePointerDown = useCallback((e) => {
         // Only trigger for primary button (left click / single touch)
         if (e.button !== 0) return;
         isLongPress.current = false;
+
+        // Start swipe tracking
+        swipeStart.current = { x: e.clientX, y: e.clientY, active: true };
+        isVerticalScroll.current = false;
 
         let target = e.target;
         while (target && target !== contentRef.current) {
@@ -468,24 +495,57 @@ export function Player() {
                     if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
                     saveBookmark(currentSpineIndex, idx, text);
                     longPressTimer.current = null;
-                }, 500); // Back to 500ms, but now with better conflict resolution
+                }, 500);
                 return;
             }
             target = target.parentNode;
         }
     }, [saveBookmark, currentSpineIndex]);
 
-    const handlePointerUp = useCallback(() => {
+    const handlePointerUp = useCallback((e) => {
+        // Cleanup long-press timer
         if (longPressTimer.current) {
             clearTimeout(longPressTimer.current);
             longPressTimer.current = null;
         }
-    }, []);
+
+        // Swipe detection
+        if (swipeStart.current.active && !isLongPress.current && !isVerticalScroll.current) {
+            const deltaX = e.clientX - swipeStart.current.x;
+            const absDeltaX = Math.abs(deltaX);
+
+            if (absDeltaX > SWIPE_THRESHOLD) {
+                if (deltaX > 0) {
+                    // Right swipe → previous sentence
+                    playFromIndex(currentIndex - 1);
+                } else {
+                    // Left swipe → next sentence
+                    playFromIndex(currentIndex + 1);
+                }
+                if (navigator.vibrate) navigator.vibrate(15);
+            }
+        }
+
+        swipeStart.current.active = false;
+    }, [currentIndex, playFromIndex]);
 
     const handlePointerMove = useCallback((e) => {
+        // Determine scroll direction (only once per gesture)
+        if (swipeStart.current.active && !isVerticalScroll.current) {
+            const dx = Math.abs(e.clientX - swipeStart.current.x);
+            const dy = Math.abs(e.clientY - swipeStart.current.y);
+            if (dx > 5 || dy > 5) {
+                isVerticalScroll.current = dy > dx;
+            }
+            // If horizontal swipe, prevent vertical scroll takeover
+            if (!isVerticalScroll.current && dx > 30) {
+                e.preventDefault();
+            }
+        }
+
+        // Long-press cancellation (existing logic)
         if (!longPressTimer.current) return;
 
-        // If user moves more than 10px, cancel the long press (assume they are scrolling)
         const dist = Math.sqrt(
             Math.pow(e.clientX - lastPointerPos.current.x, 2) +
             Math.pow(e.clientY - lastPointerPos.current.y, 2)
@@ -514,11 +574,63 @@ export function Player() {
                         {id ? 'Chapters' : 'Library'}
                     </Link>
                 </div>
-                <ThemeToggle />
-                <Settings config={ttsConfig} onConfigChange={setTtsConfig} />
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <button
+                        onClick={() => setShowBookmarks(prev => !prev)}
+                        style={{
+                            background: 'transparent',
+                            color: showBookmarks ? 'var(--accent-color)' : 'var(--text-primary)',
+                            padding: '4px',
+                            position: 'relative'
+                        }}
+                        title="Bookmarks"
+                    >
+                        <Bookmark size={20} fill={showBookmarks ? 'currentColor' : 'none'} />
+                        {bookmarks.length > 0 && (
+                            <span style={{
+                                position: 'absolute',
+                                top: '-2px',
+                                right: '-6px',
+                                background: 'var(--accent-color)',
+                                color: 'white',
+                                fontSize: '0.6rem',
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                {bookmarks.length}
+                            </span>
+                        )}
+                    </button>
+                    <ThemeToggle />
+                    <Settings config={ttsConfig} onConfigChange={setTtsConfig} />
+                </div>
             </nav>
 
-            {loading && <div style={{ padding: '2rem', textAlign: 'center' }}>Loading content...</div>}
+            {loading && (
+                <div style={{ padding: '2rem', maxWidth: '700px', margin: '0 auto' }}>
+                    {Array.from({ length: 8 }, (_, i) => (
+                        <Skeleton
+                            key={i}
+                            width={`${85 + Math.random() * 15}%`}
+                            height="1rem"
+                            style={{ marginBottom: '0.75rem' }}
+                        />
+                    ))}
+                    <Skeleton width="60%" height="1rem" style={{ marginBottom: '2rem' }} />
+                    {Array.from({ length: 6 }, (_, i) => (
+                        <Skeleton
+                            key={i + 8}
+                            width={`${80 + Math.random() * 20}%`}
+                            height="1rem"
+                            style={{ marginBottom: '0.75rem' }}
+                        />
+                    ))}
+                </div>
+            )}
             {error && <div style={{ color: 'red', padding: '1rem' }}>{error}</div>}
 
             <div
@@ -534,7 +646,7 @@ export function Player() {
                     padding: '1rem 1rem 6rem 1rem',
                     lineHeight: '1.6',
                     fontSize: '1.1rem',
-                    touchAction: 'pan-y' // Ensure vertical scroll but allow our pointer logic
+                    touchAction: 'pan-y pinch-zoom' // Allow vertical scroll + pinch, swipe handled by pointer events
                 }}
             >
                 <button
@@ -577,6 +689,21 @@ export function Player() {
                     Next →
                 </button>
             </div>
+
+            <BookmarkPanel
+                bookmarks={bookmarks}
+                currentSpineIndex={currentSpineIndex}
+                onNavigate={(spineIndex, nodeIndex) => {
+                    navigate(`/book/${id}/read/${spineIndex}?node=${nodeIndex}`);
+                    setShowBookmarks(false);
+                }}
+                onDelete={async (bookmarkId) => {
+                    await bookStore.removeBookmark(id, bookmarkId);
+                    setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+                }}
+                isOpen={showBookmarks}
+                onClose={() => setShowBookmarks(false)}
+            />
 
             <div style={{
                 position: 'absolute',

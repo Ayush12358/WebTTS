@@ -4,6 +4,7 @@ import { bookStore } from '../core/bookStore';
 import { getParserForFile } from '../core/parsers';
 import { ArrowLeft, BookOpen, Clock, Bookmark, Trash2 } from 'lucide-react';
 import { ThemeToggle } from './components/ThemeToggle';
+import { Skeleton } from './components/Skeleton';
 
 export function TOC() {
     const { id } = useParams();
@@ -118,7 +119,32 @@ export function TOC() {
         setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
     };
 
-    if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Chapter List...</div>;
+    if (loading) return (
+        <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+            <Skeleton width="120px" height="1.2rem" style={{ marginBottom: '2rem' }} />
+            <Skeleton width="60%" height="2rem" style={{ marginBottom: '0.5rem' }} />
+            <Skeleton width="40%" height="1rem" style={{ marginBottom: '0.5rem' }} />
+            <Skeleton width="150px" height="1rem" style={{ marginBottom: '2rem' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {Array.from({ length: 6 }, (_, i) => (
+                    <div key={i} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        padding: '1rem',
+                        border: '1px solid rgba(128,128,128,0.1)',
+                        borderRadius: '8px'
+                    }}>
+                        <Skeleton width="24px" height="24px" style={{ borderRadius: '50%', flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                            <Skeleton width={`${50 + Math.random() * 30}%`} height="1rem" style={{ marginBottom: '0.35rem' }} />
+                            <Skeleton width={`${20 + Math.random() * 20}%`} height="0.75rem" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
     if (!meta) return <div style={{ padding: '2rem', textAlign: 'center' }}>Book not found.</div>;
 
     return (

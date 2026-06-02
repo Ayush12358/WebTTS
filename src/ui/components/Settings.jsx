@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getAvailableEngines, engines } from '../../core/tts';
-import { Settings as SettingsIcon, X, Key } from 'lucide-react';
+import { bookStore } from '../../core/bookStore';
+import { formatBytes } from '../../core/quotaManager';
+import { Settings as SettingsIcon, X, Key, HardDrive, Trash2 } from 'lucide-react';
 
 export function Settings({ config, onConfigChange }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -8,6 +10,7 @@ export function Settings({ config, onConfigChange }) {
     const [apiKeys, setApiKeys] = useState({
         googleCloud: localStorage.getItem('googleCloudTTSApiKey') || ''
     });
+    const [storageInfo, setStorageInfo] = useState({ usage: 0, quota: 0, percentUsed: 0 });
 
     const availableEngines = getAvailableEngines();
     const currentEngineInfo = availableEngines.find(e => e.id === config.engineId);
@@ -28,9 +31,15 @@ export function Settings({ config, onConfigChange }) {
             }
         };
 
+        const loadStorage = async () => {
+            const info = await bookStore.getStorageUsage();
+            setStorageInfo(info);
+        };
+
         checkEngine();
         loadVoices();
-    }, [config.engineId, apiKeys]);
+        if (isOpen) loadStorage();
+    }, [config.engineId, apiKeys, isOpen]);
 
     const handleEngineChange = (e) => {
         onConfigChange({ ...config, engineId: e.target.value, voiceId: '' });
@@ -53,6 +62,13 @@ export function Settings({ config, onConfigChange }) {
         alert('Google Cloud API key saved!');
         // Reload voices
         onConfigChange({ ...config });
+    };
+
+    const handleClearAllBooks = async () => {
+        if (!window.confirm('Delete ALL books? This cannot be undone.')) return;
+        await bookStore.clearAllBooks();
+        const info = await bookStore.getStorageUsage();
+        setStorageInfo(info);
     };
 
     if (!isOpen) {
@@ -159,6 +175,64 @@ export function Settings({ config, onConfigChange }) {
                     onChange={handlePitchChange}
                     style={{ width: '100%' }}
                 />
+            </div>
+
+            {/* Storage Usage */}
+            <div style={{
+                borderTop: '1px solid var(--border-color, #ccc)',
+                paddingTop: '1rem'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <HardDrive size={16} />
+                    <strong style={{ fontSize: '0.9rem' }}>Storage</strong>
+                </div>
+                {storageInfo.quota > 0 ? (
+                    <>
+                        <div style={{
+                            height: '6px',
+                            background: 'rgba(128,128,128,0.15)',
+                            borderRadius: '3px',
+                            overflow: 'hidden',
+                            marginBottom: '0.25rem'
+                        }}>
+                            <div style={{
+                                width: `${Math.min(storageInfo.percentUsed, 100)}%`,
+                                height: '100%',
+                                background: storageInfo.percentUsed > 80
+                                    ? 'var(--toast-text-error, #991b1b)'
+                                    : storageInfo.percentUsed > 60
+                                        ? 'var(--toast-text-warning, #92400e)'
+                                        : 'var(--accent-color, #3b82f6)',
+                                borderRadius: '3px',
+                                transition: 'width 0.3s'
+                            }} />
+                        </div>
+                        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                            {formatBytes(storageInfo.usage)} / {formatBytes(storageInfo.quota)} used ({storageInfo.percentUsed.toFixed(0)}%)
+                        </p>
+                    </>
+                ) : (
+                    <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                        Storage info unavailable
+                    </p>
+                )}
+                <button
+                    onClick={handleClearAllBooks}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontSize: '0.8rem',
+                        padding: '0.5rem 0.75rem',
+                        background: 'rgba(220,38,38,0.1)',
+                        color: 'var(--toast-text-error, #991b1b)',
+                        border: '1px solid rgba(220,38,38,0.3)',
+                        borderRadius: '6px'
+                    }}
+                >
+                    <Trash2 size={14} />
+                    Delete All Books
+                </button>
             </div>
 
             <div style={{ marginTop: 'auto', fontSize: '0.75rem', opacity: 0.7 }}>

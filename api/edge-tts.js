@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import escape from 'xml-escape';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 export default async function handler(req, res) {
     const { text, voice, rate, pitch } = req.query;
