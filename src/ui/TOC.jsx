@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { getParserForFile } from '../core/parsers';
-import { ArrowLeft, BookOpen, Clock, Bookmark, Trash2 } from 'lucide-react';
-import { ThemeToggle } from './components/ThemeToggle';
+import { BookOpen, Clock, Bookmark, Trash2 } from 'lucide-react';
 import { Skeleton } from './components/Skeleton';
 
 export function TOC() {
@@ -149,17 +148,8 @@ export function TOC() {
 
     return (
         <div className="toc-container" style={{ padding: '1rem', maxWidth: '800px', margin: '0 auto' }}>
-            <nav style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: 'var(--text-primary)' }}>
-                    <ArrowLeft size={20} />
-                    Library
-                </Link>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <ThemeToggle />
-                </div>
-            </nav>
 
-            <div className="book-header" style={{ marginBottom: '2rem', borderBottom: '1px solid rgba(128,128,128,0.2)', paddingBottom: '1rem' }}>
+            <div className="book-header" style={{ marginBottom: '2rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                 <h1 style={{ margin: '0 0 0.5rem 0' }}>{meta.title}</h1>
                 <p style={{ margin: 0, opacity: 0.7 }}>{meta.author}</p>
                 {totalTime && (
@@ -168,7 +158,7 @@ export function TOC() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.5rem',
-                        color: 'var(--accent-color, #3B82F6)',
+                        color: 'var(--accent-color)',
                         fontWeight: '500',
                         fontSize: '0.9rem'
                     }}>
@@ -181,8 +171,8 @@ export function TOC() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.5rem',
-                        color: 'var(--accent-color, #3B82F6)',
-                        opacity: 0.6,
+                        color: 'var(--accent-color)',
+                        opacity: 0.7,
                         fontSize: '0.8rem',
                         fontStyle: 'italic'
                     }}>
@@ -194,7 +184,14 @@ export function TOC() {
             <div className="chapter-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <h3 style={{ marginBottom: '1rem' }}>Contents</h3>
                 {chapters.length === 0 ? (
-                    <div style={{ padding: '1rem', opacity: 0.7, border: '1px dashed rgba(128,128,128,0.3)', borderRadius: '8px' }}>
+                    <div style={{
+                        padding: '2rem 1rem',
+                        textAlign: 'center',
+                        color: 'var(--text-secondary)',
+                        border: '1px dashed var(--border-color)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem'
+                    }}>
                         No table of contents found.
                     </div>
                 ) : (
@@ -202,28 +199,30 @@ export function TOC() {
                         <div
                             key={index}
                             onClick={() => navigate(`/book/${id}/read/${index}`)}
-                            className="chapter-item"
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`Chapter ${index + 1}: ${chapter.title || ''}`}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/book/${id}/read/${index}`); } }}
+                            className="interactive-card"
                             style={{
-                                padding: '1rem',
-                                border: '1px solid rgba(128,128,128,0.1)',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
+                                padding: '0.9rem 1rem',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '10px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '1rem',
-                                transition: 'background 0.2s',
+                                gap: '0.75rem',
                                 position: 'relative'
                             }}
                         >
-                            <span style={{ opacity: 0.5, fontSize: '0.8rem', minWidth: '24px' }}>{index + 1}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', minWidth: '24px', textAlign: 'center' }}>{index + 1}</span>
                             <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 500 }}>{chapter.title || chapter.label || `Chapter ${index + 1}`}</div>
+                                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{chapter.title || chapter.label || `Chapter ${index + 1}`}</div>
                                 {chapter.words > 0 && (
                                     <div style={{
                                         fontSize: '0.75rem',
-                                        color: 'var(--accent-color, #3B82F6)',
+                                        color: 'var(--accent-color)',
                                         opacity: 0.8,
-                                        marginTop: '4px'
+                                        marginTop: '2px'
                                     }}>
                                         {getReadingTime(chapter.words)}
                                     </div>
@@ -246,30 +245,35 @@ export function TOC() {
                         <div
                             key={b.id}
                             onClick={() => navigate(`/book/${id}/read/${b.spineIndex}?node=${b.nodeIndex}`)}
+                            tabIndex={0}
+                            role="button"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navigate(`/book/${id}/read/${b.spineIndex}?node=${b.nodeIndex}`); } }}
+                            className="interactive-card"
                             style={{
-                                padding: '1rem',
-                                border: '1px solid rgba(128,128,128,0.1)',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
+                                padding: '0.9rem 1rem',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '10px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '1rem',
+                                gap: '0.75rem',
                                 position: 'relative'
                             }}
                         >
                             <div style={{ flex: 1 }}>
-                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontStyle: 'italic', opacity: 0.8 }}>
+                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--text-primary)', opacity: 0.85 }}>
                                     "{b.text}"
                                 </p>
-                                <span style={{ fontSize: '0.75rem', opacity: 0.5 }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                                     Chapter {b.spineIndex + 1} • {new Date(b.timestamp).toLocaleDateString()}
                                 </span>
                             </div>
                             <button
                                 onClick={(e) => deleteBookmark(e, b.id)}
-                                style={{ background: 'transparent', color: 'red', opacity: 0.5 }}
+                                className="icon-btn"
+                                aria-label="Delete bookmark"
+                                style={{ color: 'var(--danger-text)', opacity: 0.6, flexShrink: 0 }}
                             >
-                                <Trash2 size={16} />
+                                <Trash2 size={15} />
                             </button>
                         </div>
                     ))}

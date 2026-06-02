@@ -32,10 +32,11 @@ export function ThemeToggle() {
     return (
         <button
             onClick={toggleTheme}
+            className="icon-btn"
             aria-label="Toggle theme"
-            style={{ background: 'transparent', color: 'var(--text-primary)', padding: '0.5rem' }}
+            style={{ color: 'var(--text-secondary)' }}
         >
-            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>
     );
 }

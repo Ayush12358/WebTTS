@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { canStoreBook, formatBytes } from '../core/quotaManager';
 import { Upload, Book, Trash2, FileText, Clock } from 'lucide-react';
-import { ThemeToggle } from './components/ThemeToggle';
 import { useToast } from './components/Toast';
 import { Skeleton } from './components/Skeleton';
 
@@ -172,11 +171,7 @@ export function Home() {
     };
 
     return (
-        <div className="home-container" style={{ maxWidth: '800px', margin: '2rem auto', padding: '1rem' }}>
-            <header style={{ marginBottom: '3rem', textAlign: 'center' }}>
-                <h2>WebTTS <ThemeToggle /></h2>
-            </header>
-
+        <div className="home-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '1rem' }}>
             {/* Book Grid */}
             <div className="book-grid" style={{
                 display: 'grid',
@@ -207,8 +202,13 @@ export function Home() {
                     <div
                         key={book.id}
                         onClick={() => navigate(`/book/${book.id}/toc`)}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Open ${book.title || 'book'}`}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/book/${book.id}/toc`); } }}
+                        className="interactive-card"
                         style={{
-                            background: 'var(--bg-secondary, rgba(0,0,0,0.05))',
+                            background: 'var(--bg-secondary)',
                             borderRadius: '12px',
                             padding: '0.75rem',
                             cursor: 'pointer',
@@ -219,11 +219,10 @@ export function Home() {
                             justifyContent: 'flex-start',
                             alignItems: 'center',
                             textAlign: 'center',
-                            border: '1px solid rgba(128,128,128,0.1)',
-                            transition: 'all 0.2s',
-                            overflow: 'hidden'
+                            border: '1px solid var(--border-color)',
+                            overflow: 'hidden',
+                            boxShadow: '0 1px 3px var(--shadow-color)'
                         }}
-                        className="book-card"
                     >
                         {book.cover ? (
                             <img
@@ -235,7 +234,7 @@ export function Home() {
                                     objectFit: 'cover',
                                     borderRadius: '8px',
                                     marginBottom: '0.75rem',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                                    boxShadow: '0 2px 8px var(--shadow-color)'
                                 }}
                             />
                         ) : (
@@ -245,11 +244,11 @@ export function Home() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 width: '100%',
-                                background: 'rgba(0,0,0,0.03)',
+                                background: 'var(--surface-hover)',
                                 borderRadius: '8px',
                                 marginBottom: '0.75rem'
                             }}>
-                                <Book size={48} style={{ opacity: 0.1 }} />
+                                <Book size={48} style={{ opacity: 0.15, color: 'var(--text-secondary)' }} />
                             </div>
                         )}
                         <h4 style={{
@@ -277,7 +276,7 @@ export function Home() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.4rem',
-                                color: 'var(--accent-color, #3B82F6)',
+                                color: 'var(--accent-color)',
                                 fontWeight: '500',
                                 fontSize: '0.75rem'
                             }}>
@@ -299,14 +298,14 @@ export function Home() {
 
                         <button
                             onClick={(e) => deleteBook(e, book.id)}
+                            className="icon-btn"
+                            aria-label={`Delete ${book.title || 'book'}`}
                             style={{
                                 position: 'absolute',
                                 top: '0.5rem',
                                 right: '0.5rem',
-                                background: 'transparent',
-                                color: 'red',
-                                opacity: 0.5,
-                                padding: '4px'
+                                color: 'var(--danger-text)',
+                                opacity: 0.6,
                             }}
                         >
                             <Trash2 size={16} />
@@ -318,25 +317,28 @@ export function Home() {
             <div style={{ display: 'flex', gap: '1rem' }}>
                 {/* Upload Zone */}
                 <div
-                    className="drop-zone"
+                    className="drop-zone interactive-card"
                     onDrop={onDrop}
                     onDragOver={onDragOver}
                     onDragLeave={onDragLeave}
                     onClick={() => document.getElementById('file-input').click()}
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Upload a book file"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('file-input').click(); }}
                     style={{
                         flex: 1,
-                        border: `2px dashed ${isDragging ? 'var(--accent-color)' : 'rgba(128,128,128,0.3)'}`,
-                        borderColor: isDragging ? 'var(--accent-color)' : 'rgba(128,128,128,0.3)',
-                        borderRadius: '8px',
+                        border: `2px dashed ${isDragging ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                        borderRadius: '12px',
                         padding: '2rem',
                         textAlign: 'center',
                         cursor: 'pointer',
-                        background: isDragging ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                        transition: 'all 0.2s'
+                        background: isDragging ? 'rgba(59, 130, 246, 0.06)' : 'var(--bg-secondary)',
+                        transition: 'border-color 0.2s, background 0.2s'
                     }}
                 >
-                    <Upload size={32} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                    <p style={{ margin: 0 }}>
+                    <Upload size={32} style={{ marginBottom: '0.75rem', opacity: 0.4, color: 'var(--text-secondary)' }} />
+                    <div style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500 }}>
                         {loading ? (
                             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                                 <Skeleton width="16px" height="16px" style={{ borderRadius: '50%', display: 'inline-block', marginBottom: 0 }} />
@@ -345,7 +347,8 @@ export function Home() {
                         ) : (
                             `Add a book (${supportedExts.join(', ').toUpperCase()})`
                         )}
-                    </p>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.5 }}>or drag and drop</p>
                     <input
                         type="file"
                         id="file-input"
@@ -358,68 +361,75 @@ export function Home() {
                 {/* Paste Zone */}
                 <div
                     onClick={() => setShowPasteModal(true)}
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Paste text content"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowPasteModal(true); }}
+                    className="interactive-card"
                     style={{
                         flex: 1,
-                        border: '2px dashed rgba(128,128,128,0.3)',
-                        borderRadius: '8px',
+                        border: '2px dashed var(--border-color)',
+                        borderRadius: '12px',
                         padding: '2rem',
                         textAlign: 'center',
                         cursor: 'pointer',
-                        transition: 'all 0.2s'
+                        background: 'var(--bg-secondary)',
+                        transition: 'border-color 0.2s, background 0.2s'
                     }}
-                    className="paste-zone"
                 >
-                    <Upload size={32} style={{ marginBottom: '1rem', opacity: 0.5, transform: 'rotate(180deg)' }} />
-                    <p style={{ margin: 0 }}>Paste Text</p>
+                    <FileText size={32} style={{ marginBottom: '0.75rem', opacity: 0.4, color: 'var(--text-secondary)' }} />
+                    <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500 }}>Paste Text</p>
+                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.5 }}>create a book from clipboard</p>
                 </div>
             </div>
 
             {/* Paste Modal */}
             {showPasteModal && (
-                <div style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.8)', zIndex: 1000,
-                    display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    padding: '1rem'
-                }}>
-                    <div style={{
-                        background: 'var(--bg-primary, #fff)',
-                        width: '100%', maxWidth: '600px',
-                        padding: '2rem', borderRadius: '12px',
-                        display: 'flex', flexDirection: 'column', gap: '1rem'
+                <div
+                    onClick={(e) => { if (e.target === e.currentTarget) setShowPasteModal(false); }}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setShowPasteModal(false); }}
+                    style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.6)',
+                        backdropFilter: 'blur(4px)',
+                        zIndex: 1000,
+                        display: 'flex', justifyContent: 'center', alignItems: 'center',
+                        padding: '1rem',
+                        animation: 'toast-slide-in 0.2s ease-out'
                     }}>
-                        <h3 style={{ margin: 0 }}>Paste Text Content</h3>
+                    <div style={{
+                        background: 'var(--bg-primary)',
+                        width: '100%', maxWidth: '520px',
+                        padding: '2rem', borderRadius: '16px',
+                        display: 'flex', flexDirection: 'column', gap: '1rem',
+                        boxShadow: '0 16px 48px var(--shadow-lg)'
+                    }}>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Paste Text Content</h3>
                         <input
                             type="text"
                             placeholder="Title (optional)"
                             value={pastedTitle}
                             onChange={(e) => setPastedTitle(e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
                         />
                         <textarea
                             placeholder="Paste your text here..."
                             value={pastedText}
                             onChange={(e) => setPastedText(e.target.value)}
                             style={{
-                                width: '100%', height: '300px',
-                                padding: '0.5rem', borderRadius: '4px',
-                                fontFamily: 'inherit'
+                                width: '100%', height: '250px',
+                                resize: 'vertical'
                             }}
                         />
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                             <button
                                 onClick={() => setShowPasteModal(false)}
-                                style={{ background: 'transparent', padding: '0.5rem 1rem' }}
+                                className="icon-btn"
+                                style={{ background: 'transparent', color: 'var(--text-secondary)', padding: '0.5rem 1.25rem', minWidth: 'auto', minHeight: 'auto' }}
                             >Cancel</button>
                             <button
                                 onClick={handlePaste}
                                 disabled={!pastedText.trim() || loading}
-                                style={{
-                                    background: 'var(--accent-color, #3B82F6)',
-                                    color: '#fff', padding: '0.5rem 1.5rem',
-                                    borderRadius: '4px'
-                                }}
-                            >Save & Read</button>
+                            >Save &amp; Read</button>
                         </div>
                     </div>
                 </div>

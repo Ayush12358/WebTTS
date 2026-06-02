@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { getParserForFile } from '../core/parsers';
 import { engines } from '../core/tts';
-import { Settings } from './components/Settings';
 import { Controls } from './components/Controls';
-import { ThemeToggle } from './components/ThemeToggle';
 import { PDFPageView } from './components/PDFPageView';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { Skeleton } from './components/Skeleton';
-import { Bookmark } from 'lucide-react';
+import { useHeaderActions } from './components/HeaderActions';
+import { useTTSConfig } from '../core/useTTSConfig';
 
 export function Player() {
     const { id, cfi } = useParams();
@@ -28,13 +26,9 @@ export function Player() {
     const [playing, setPlaying] = useState(false);
     const [bookmarks, setBookmarks] = useState([]);
     const [showBookmarks, setShowBookmarks] = useState(false);
+    const { registerBookmarks, clearBookmarks } = useHeaderActions();
 
-    const [ttsConfig, setTtsConfig] = useState({
-        engineId: 'webSpeech',
-        voiceId: '',
-        rate: 1.0,
-        pitch: 1.0
-    });
+    const [ttsConfig, setTtsConfig] = useTTSConfig();
 
     // Playback State
     const [currentIndex, setCurrentIndex] = useState(-1);
@@ -60,12 +54,6 @@ export function Player() {
                 if (!id) {
                     navigate('/');
                     return;
-                }
-
-                // Load saved TTS settings
-                const savedSettings = await bookStore.getSettings('ttsConfig');
-                if (savedSettings) {
-                    setTtsConfig(savedSettings);
                 }
 
                 const bookData = await bookStore.getBookData(id);
@@ -557,81 +545,49 @@ export function Player() {
         }
     }, []);
 
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+            if (e.key === 'Escape') { setShowBookmarks(false); return; }
+            if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
+            if (e.key === 'ArrowRight') { e.preventDefault(); playFromIndex(currentIndex + 1); return; }
+            if (e.key === 'ArrowLeft') { e.preventDefault(); playFromIndex(currentIndex - 1); return; }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [currentIndex]);
+
+    // Register the bookmark toggle with the global header
+    useEffect(() => {
+        registerBookmarks(bookmarks.length, () => setShowBookmarks(prev => !prev));
+        return () => clearBookmarks();
+    }, [bookmarks.length, registerBookmarks, clearBookmarks]);
+
     return (
         <div className="player-container" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <nav style={{
-                padding: '0.5rem',
-                borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.1))',
-                flexShrink: 0,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'var(--bg-primary)'
-            }}>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <Link to={id ? `/book/${id}/toc` : '/'} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none', color: 'var(--text-primary)' }}>
-                        <ArrowLeft size={20} />
-                        {id ? 'Chapters' : 'Library'}
-                    </Link>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    <button
-                        onClick={() => setShowBookmarks(prev => !prev)}
-                        style={{
-                            background: 'transparent',
-                            color: showBookmarks ? 'var(--accent-color)' : 'var(--text-primary)',
-                            padding: '4px',
-                            position: 'relative'
-                        }}
-                        title="Bookmarks"
-                    >
-                        <Bookmark size={20} fill={showBookmarks ? 'currentColor' : 'none'} />
-                        {bookmarks.length > 0 && (
-                            <span style={{
-                                position: 'absolute',
-                                top: '-2px',
-                                right: '-6px',
-                                background: 'var(--accent-color)',
-                                color: 'white',
-                                fontSize: '0.6rem',
-                                width: '16px',
-                                height: '16px',
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
-                                {bookmarks.length}
-                            </span>
-                        )}
-                    </button>
-                    <ThemeToggle />
-                    <Settings config={ttsConfig} onConfigChange={setTtsConfig} />
-                </div>
-            </nav>
 
             {loading && (
-                <div style={{ padding: '2rem', maxWidth: '700px', margin: '0 auto' }}>
-                    {Array.from({ length: 8 }, (_, i) => (
+                <div style={{ padding: '2rem', maxWidth: '650px', margin: '0 auto' }}>
+                    {[100, 92, 85, 97, 70, 88, 95, 60].map((width, i) => (
                         <Skeleton
                             key={i}
-                            width={`${85 + Math.random() * 15}%`}
+                            width={`${width}%`}
                             height="1rem"
-                            style={{ marginBottom: '0.75rem' }}
+                            style={{ marginBottom: i === 3 ? '2rem' : '0.75rem' }}
                         />
                     ))}
-                    <Skeleton width="60%" height="1rem" style={{ marginBottom: '2rem' }} />
-                    {Array.from({ length: 6 }, (_, i) => (
+                    {[88, 95, 75, 90, 55, 82].map((width, i) => (
                         <Skeleton
                             key={i + 8}
-                            width={`${80 + Math.random() * 20}%`}
+                            width={`${width}%`}
                             height="1rem"
                             style={{ marginBottom: '0.75rem' }}
                         />
                     ))}
                 </div>
             )}
-            {error && <div style={{ color: 'red', padding: '1rem' }}>{error}</div>}
+            {error && <div style={{ color: 'var(--danger-text)', padding: '1rem', textAlign: 'center' }}>{error}</div>}
 
             <div
                 className="reader-content"
@@ -643,24 +599,27 @@ export function Player() {
                 style={{
                     flex: 1,
                     overflowY: 'auto',
-                    padding: '1rem 1rem 6rem 1rem',
-                    lineHeight: '1.6',
-                    fontSize: '1.1rem',
-                    touchAction: 'pan-y pinch-zoom' // Allow vertical scroll + pinch, swipe handled by pointer events
+                    padding: '1rem 1rem 5rem 1rem',
+                    lineHeight: '1.7',
+                    fontSize: '1.05rem',
+                    touchAction: 'pan-y pinch-zoom'
                 }}
             >
                 <button
                     onClick={goToPrevChapter}
                     disabled={!parser || !book || parser.getPrevChapter(book, currentSpineIndex) === null}
                     style={{
-                        display: 'block', width: '100%', padding: '1rem',
-                        marginBottom: '2rem',
-                        opacity: (!parser || !book || parser.getPrevChapter(book, currentSpineIndex) === null) ? 0.5 : 1,
-                        background: 'rgba(128,128,128,0.1)',
-                        color: 'var(--text-primary)'
+                        display: 'block', width: '100%', padding: '0.75rem 1rem',
+                        marginBottom: '1.5rem',
+                        background: 'var(--surface-hover)',
+                        color: 'var(--text-secondary)',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        transition: 'background 0.15s, opacity 0.15s'
                     }}
                 >
-                    ← Previous
+                    ← Previous Chapter
                 </button>
 
                 {nativePdfPayload ? (
@@ -679,14 +638,17 @@ export function Player() {
                     onClick={goToNextChapter}
                     disabled={!parser || !book || parser.getNextChapter(book, currentSpineIndex) === null}
                     style={{
-                        display: 'block', width: '100%', padding: '1rem',
-                        marginTop: '2rem',
-                        opacity: (!parser || !book || parser.getNextChapter(book, currentSpineIndex) === null) ? 0.5 : 1,
-                        background: 'rgba(128,128,128,0.1)',
-                        color: 'var(--text-primary)'
+                        display: 'block', width: '100%', padding: '0.75rem 1rem',
+                        marginTop: '1.5rem',
+                        background: 'var(--surface-hover)',
+                        color: 'var(--text-secondary)',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        transition: 'background 0.15s, opacity 0.15s'
                     }}
                 >
-                    Next →
+                    Next Chapter →
                 </button>
             </div>
 
@@ -706,13 +668,10 @@ export function Player() {
             />
 
             <div style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
+                flexShrink: 0,
                 background: 'var(--bg-primary)',
-                borderTop: '1px solid rgba(0,0,0,0.1)',
-                padding: '10px'
+                borderTop: '1px solid var(--border-color)',
+                padding: '0.5rem'
             }}>
                 <Controls
                     playing={playing}
@@ -726,32 +685,38 @@ export function Player() {
             <style>{`
             .tts-speakable { 
                 cursor: pointer; 
-                transition: background 0.2s; 
                 position: relative; 
-                user-select: none; /* Prevent text selection during long press */
+                user-select: none;
                 -webkit-tap-highlight-color: transparent;
                 -webkit-touch-callout: none;
+                padding: 0.15rem 0.3rem;
+                margin: 0 -0.3rem;
+                border-radius: 4px;
+                transition: background 0.15s;
             }
-            .tts-speakable:hover { background: rgba(255, 255, 255, 0.1); }
+            .tts-speakable:hover { background: var(--surface-hover); }
             .is-bookmarked::before {
                 content: '🔖';
                 position: absolute;
-                left: -1.25rem;
+                left: -1.5rem;
                 top: 0;
-                font-size: 0.8rem;
-                opacity: 0.8;
+                font-size: 0.75rem;
+                opacity: 0.7;
+                pointer-events: none;
             }
             .tts-active { 
-                background-color: rgba(255, 235, 59, 1) !important;
+                background-color: rgba(255, 235, 59, 0.85) !important;
+                color: #1a1a1a !important;
                 border-radius: 4px; 
-                outline: 3px solid #F57F17 !important;
-                color: #000000 !important;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+                outline: 2px solid #eab308 !important;
+                outline-offset: 1px;
+                box-shadow: 0 2px 8px rgba(234, 179, 8, 0.3);
+                transition: background 0.1s, outline 0.1s;
             }
             [data-theme='dark'] .tts-active { 
-                background-color: rgba(255, 235, 59, 0.7) !important; 
-                outline-color: #F57F17 !important;
-                color: #ffffff !important;
+                background-color: rgba(255, 235, 59, 0.75) !important;
+                color: #1a1a1a !important;
+                outline-color: #facc15 !important;
             }
             img { max-width: 100%; height: auto; display: block; margin: 1rem auto; }
           `}</style>

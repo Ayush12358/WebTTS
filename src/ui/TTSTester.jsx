@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { engines, getAvailableEngines } from '../core/tts';
-import { ArrowLeft, Play, Square, RefreshCcw } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { ThemeToggle } from './components/ThemeToggle';
+import { Play, Square, RefreshCcw } from 'lucide-react';
 
 export function TTSTester() {
     const [text, setText] = useState("This is a simple test of the text-to-speech system.");
@@ -75,10 +73,6 @@ export function TTSTester() {
             color: 'var(--text-primary)',
             fontFamily: 'inherit'
         }}>
-            <header style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                <Link to="/" style={{ color: 'inherit' }}><ArrowLeft /></Link>
-                <h1 style={{ fontSize: '1.5rem', margin: 0 }}>TTS Diagnostics <ThemeToggle /></h1>
-            </header>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {/* Status Indicator */}

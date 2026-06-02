@@ -3,41 +3,55 @@ import { Play, Pause, SkipBack, SkipForward, Clock } from 'lucide-react';
 
 export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
     return (
-        <div className="controls" style={{
-            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem',
-            padding: '1rem', background: 'var(--bg-primary)',
-            borderTop: '1px solid rgba(0,0,0,0.1)'
+        <div style={{
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5rem',
+            padding: '0.25rem 1rem',
+            position: 'relative'
         }}>
-            <button onClick={onPrev} style={{ background: 'transparent', color: 'var(--text-primary)' }}>
-                <SkipBack />
+            <button
+                onClick={onPrev}
+                className="icon-btn"
+                aria-label="Previous sentence"
+                style={{ color: 'var(--text-secondary)' }}
+            >
+                <SkipBack size={20} />
             </button>
 
             <button
                 onClick={onPlayPause}
+                aria-label={playing ? 'Pause' : 'Play'}
                 style={{
-                    width: '50px', height: '50px', borderRadius: '50%',
-                    background: 'var(--accent-color)', color: 'white',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    width: '44px', height: '44px', borderRadius: '50%',
+                    background: 'var(--accent-color)',
+                    color: 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 2px 8px var(--shadow-color)',
+                    transition: 'transform 0.1s, box-shadow 0.15s'
                 }}
             >
-                {playing ? <Pause /> : <Play />}
+                {playing ? <Pause size={20} /> : <Play size={20} style={{ marginLeft: '2px' }} />}
             </button>
 
-            <button onClick={onNext} style={{ background: 'transparent', color: 'var(--text-primary)' }}>
-                <SkipForward />
+            <button
+                onClick={onNext}
+                className="icon-btn"
+                aria-label="Next sentence"
+                style={{ color: 'var(--text-secondary)' }}
+            >
+                <SkipForward size={20} />
             </button>
 
             {timeLeft && (
                 <div style={{
                     position: 'absolute',
-                    right: '1rem',
-                    fontSize: '0.8rem',
-                    opacity: 0.6,
+                    right: '0.5rem',
+                    fontSize: '0.75rem',
+                    color: 'var(--text-secondary)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.4rem'
+                    gap: '0.3rem'
                 }}>
-                    <Clock size={14} /> {timeLeft} left
+                    <Clock size={13} /> {timeLeft} left
                 </div>
             )}
         </div>

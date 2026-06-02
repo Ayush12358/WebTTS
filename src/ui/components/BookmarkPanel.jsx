@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bookmark, Trash2, X, Search, BookOpen } from 'lucide-react';
-import { Skeleton } from './Skeleton';
 
 /**
  * Slide-out bookmark management panel — mirrors Settings.jsx pattern.
@@ -9,6 +8,13 @@ import { Skeleton } from './Skeleton';
 export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDelete, isOpen, onClose }) {
     const [search, setSearch] = useState('');
     const [expandedId, setExpandedId] = useState(null);
+
+    // Close on Escape
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape' && isOpen) onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -20,19 +26,17 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
 
     return (
         <div
-            className="bookmark-panel"
+            className="bookmark-panel slide-panel"
             style={{
                 position: 'absolute',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                width: '320px',
+                top: 0, right: 0, bottom: 0,
+                width: 'clamp(280px, 80vw, 320px)',
                 background: 'var(--bg-primary)',
-                boxShadow: '-2px 0 10px rgba(0,0,0,0.2)',
+                boxShadow: '-4px 0 24px var(--shadow-lg)',
                 zIndex: 100,
                 display: 'flex',
                 flexDirection: 'column',
-                borderLeft: '1px solid var(--border-color, #ccc)'
+                borderLeft: '1px solid var(--border-color)'
             }}
         >
             {/* Header */}
@@ -41,31 +45,27 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '1rem',
-                borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.1))',
+                borderBottom: '1px solid var(--border-color)',
                 flexShrink: 0
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Bookmark size={18} />
                     <h3 style={{ margin: 0, fontSize: '1rem' }}>Bookmarks</h3>
                 </div>
-                <button
-                    onClick={onClose}
-                    style={{ background: 'transparent', color: 'var(--text-primary)', padding: 0 }}
-                >
+                <button onClick={onClose} className="icon-btn" aria-label="Close bookmarks">
                     <X size={18} />
                 </button>
             </div>
 
             {/* Search */}
             {bookmarks.length > 2 && (
-                <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color, rgba(0,0,0,0.05))', flexShrink: 0 }}>
+                <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
                     <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        padding: '0.45rem 0.6rem',
-                        background: 'var(--bg-secondary, rgba(0,0,0,0.05))',
-                        borderRadius: '6px'
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.4rem 0.6rem',
+                        background: 'var(--bg-secondary)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)'
                     }}>
                         <Search size={14} style={{ opacity: 0.4 }} />
                         <input

@@ -4,14 +4,18 @@ import { Player } from './Player';
 import { TOC } from './TOC';
 import { TTSTester } from './TTSTester';
 import { ToastProvider } from './components/Toast';
+import { Header } from './components/Header';
+import { HeaderActionsProvider } from './components/HeaderActions';
 
 function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
         <div className="app-container">
-          <main>
-            <Routes>
+          <HeaderActionsProvider>
+            <Header />
+            <main>
+              <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/book/:id/toc" element={<TOC />} />
               <Route path="/book/:id/read/:cfi" element={<Player />} />
@@ -19,6 +23,7 @@ function App() {
               <Route path="*" element={<Home />} />
             </Routes>
           </main>
+          </HeaderActionsProvider>
         </div>
       </ToastProvider>
     </BrowserRouter>

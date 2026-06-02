@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getAvailableEngines, engines } from '../../core/tts';
 import { bookStore } from '../../core/bookStore';
 import { formatBytes } from '../../core/quotaManager';
@@ -14,6 +14,12 @@ export function Settings({ config, onConfigChange }) {
 
     const availableEngines = getAvailableEngines();
     const currentEngineInfo = availableEngines.find(e => e.id === config.engineId);
+
+    // Close on Escape
+    const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Escape' && isOpen) setIsOpen(false);
+    }, [isOpen]);
+    useEffect(() => { window.addEventListener('keydown', handleKeyDown); return () => window.removeEventListener('keydown', handleKeyDown); }, [handleKeyDown]);
 
     useEffect(() => {
         const checkEngine = () => {
@@ -73,26 +79,29 @@ export function Settings({ config, onConfigChange }) {
 
     if (!isOpen) {
         return (
-            <button onClick={() => setIsOpen(true)} style={{ background: 'transparent', color: 'var(--text-primary)' }}>
-                <SettingsIcon size={24} />
+            <button onClick={() => setIsOpen(true)} className="icon-btn" aria-label="Open settings">
+                <SettingsIcon size={18} />
             </button>
         );
     }
 
     return (
-        <div className="settings-panel" style={{
+        <div className="settings-panel slide-panel" style={{
             position: 'absolute', top: 0, right: 0, bottom: 0,
-            width: '320px', background: 'var(--bg-primary)',
-            boxShadow: '-2px 0 10px rgba(0,0,0,0.2)',
+            width: 'clamp(280px, 80vw, 320px)',
+            background: 'var(--bg-primary)',
+            boxShadow: '-4px 0 24px var(--shadow-lg)',
             padding: '1rem',
             zIndex: 100,
             display: 'flex', flexDirection: 'column', gap: '1rem',
-            borderLeft: '1px solid var(--border-color, #ccc)',
+            borderLeft: '1px solid var(--border-color)',
             overflowY: 'auto'
         }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Reader Settings</h3>
-                <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', color: 'var(--text-primary)', padding: 0 }}><X /></button>
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>Settings</h3>
+                <button onClick={() => setIsOpen(false)} className="icon-btn" aria-label="Close settings">
+                    <X size={18} />
+                </button>
             </div>
 
             <div>
@@ -184,35 +193,35 @@ export function Settings({ config, onConfigChange }) {
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     <HardDrive size={16} />
-                    <strong style={{ fontSize: '0.9rem' }}>Storage</strong>
+                    <strong style={{ fontSize: '0.85rem' }}>Storage</strong>
                 </div>
                 {storageInfo.quota > 0 ? (
                     <>
                         <div style={{
-                            height: '6px',
-                            background: 'rgba(128,128,128,0.15)',
-                            borderRadius: '3px',
+                            height: '8px',
+                            background: 'var(--border-color)',
+                            borderRadius: '4px',
                             overflow: 'hidden',
-                            marginBottom: '0.25rem'
+                            marginBottom: '0.35rem'
                         }}>
                             <div style={{
                                 width: `${Math.min(storageInfo.percentUsed, 100)}%`,
                                 height: '100%',
                                 background: storageInfo.percentUsed > 80
-                                    ? 'var(--toast-text-error, #991b1b)'
+                                    ? 'var(--danger-text)'
                                     : storageInfo.percentUsed > 60
-                                        ? 'var(--toast-text-warning, #92400e)'
-                                        : 'var(--accent-color, #3b82f6)',
-                                borderRadius: '3px',
+                                        ? 'var(--toast-text-warning)'
+                                        : 'var(--accent-color)',
+                                borderRadius: '4px',
                                 transition: 'width 0.3s'
                             }} />
                         </div>
-                        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                             {formatBytes(storageInfo.usage)} / {formatBytes(storageInfo.quota)} used ({storageInfo.percentUsed.toFixed(0)}%)
                         </p>
                     </>
                 ) : (
-                    <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.75rem', opacity: 0.7 }}>
+                    <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         Storage info unavailable
                     </p>
                 )}
@@ -224,10 +233,10 @@ export function Settings({ config, onConfigChange }) {
                         gap: '0.4rem',
                         fontSize: '0.8rem',
                         padding: '0.5rem 0.75rem',
-                        background: 'rgba(220,38,38,0.1)',
-                        color: 'var(--toast-text-error, #991b1b)',
-                        border: '1px solid rgba(220,38,38,0.3)',
-                        borderRadius: '6px'
+                        background: 'var(--danger-bg)',
+                        color: 'var(--danger-text)',
+                        border: '1px solid var(--danger-border)',
+                        borderRadius: '8px'
                     }}
                 >
                     <Trash2 size={14} />
