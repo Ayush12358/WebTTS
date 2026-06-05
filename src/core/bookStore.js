@@ -1,5 +1,6 @@
 import localforage from 'localforage';
 import { getParserForFile, getSupportedExtensions } from './parsers';
+import { resolveImportFileName } from './importFile';
 import { isQuotaError, getStorageEstimate } from './quotaManager';
 
 // Configure instances
@@ -37,14 +38,15 @@ export const bookStore = {
      */
     addBook: async (data, fileName, mimeType = '') => {
         try {
+            const importFileName = resolveImportFileName(fileName, mimeType, data);
             // Get appropriate parser for the file
-            const parser = getParserForFile(fileName, mimeType);
+            const parser = getParserForFile(importFileName, mimeType);
             if (!parser) {
                 throw new Error(`Unsupported file format: ${fileName}`);
             }
 
             // Parse the book to extract metadata
-            const parsed = await parser.parse(data, fileName);
+            const parsed = await parser.parse(data, importFileName);
 
             // Generate ID
             const id = Date.now().toString();
@@ -68,7 +70,7 @@ export const bookStore = {
                 id,
                 title: parsed.title,
                 author: parsed.author,
-                fileName,
+                fileName: importFileName,
                 parserName: parser.name,
                 toc: parsed.toc,
                 totalWords: parsed.toc?.reduce((acc, curr) => acc + (curr.words || 0), 0) || 0,

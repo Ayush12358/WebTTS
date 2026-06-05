@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { isSupportedFile } from '../core/parsers';
+import { resolveImportFileName } from '../core/importFile';
 import { canStoreBook } from '../core/quotaManager';
 import { Upload, Book, Trash2, FileText, Clock } from 'lucide-react';
 import { useToast } from './components/Toast';
@@ -92,11 +93,6 @@ export function Home() {
     const handleFile = useCallback(async (file) => {
         if (!file) return;
 
-        if (!isSupportedFile(file.name, file.type)) {
-            showToast(`Please select a supported file (${SUPPORTED_EXTENSIONS.join(', ')}).`, 'warning');
-            return;
-        }
-
         setLoading(true);
         try {
             // Pre-flight quota check
@@ -110,7 +106,14 @@ export function Home() {
             }
 
             const buffer = await file.arrayBuffer();
-            const id = await bookStore.addBook(buffer, file.name, file.type);
+            const importFileName = resolveImportFileName(file.name, file.type, buffer);
+            if (!isSupportedFile(importFileName, file.type)) {
+                showToast(`Please select a supported file (${SUPPORTED_EXTENSIONS.join(', ')}).`, 'warning');
+                setLoading(false);
+                return;
+            }
+
+            const id = await bookStore.addBook(buffer, importFileName, file.type);
             navigate(`/book/${id}/toc`);
         } catch (err) {
             console.error(err);
