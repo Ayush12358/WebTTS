@@ -33,11 +33,12 @@ export const bookStore = {
      * Save a new book
      * @param {ArrayBuffer} data 
      * @param {string} fileName 
+     * @param {string} mimeType
      */
-    addBook: async (data, fileName) => {
+    addBook: async (data, fileName, mimeType = '') => {
         try {
             // Get appropriate parser for the file
-            const parser = getParserForFile(fileName);
+            const parser = getParserForFile(fileName, mimeType);
             if (!parser) {
                 throw new Error(`Unsupported file format: ${fileName}`);
             }
@@ -97,7 +98,7 @@ export const bookStore = {
      */
     getBooks: async () => {
         const books = [];
-        await metaStore.iterate((value, key) => {
+        await metaStore.iterate((value) => {
             books.push(value);
         });
         return books.sort((a, b) => b.addedAt - a.addedAt);

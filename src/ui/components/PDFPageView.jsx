@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
 export function PDFPageView({ pdfData, pageIndex, onLoaded }) {
@@ -75,32 +75,33 @@ export function PDFPageView({ pdfData, pageIndex, onLoaded }) {
                 textLayerDiv.style.height = canvas.style.height;
                 textLayerDiv.style.width = canvas.style.width;
 
-                pdfjsLib.renderTextLayer({
+                const textLayer = new pdfjsLib.TextLayer({
                     textContentSource: textContent,
                     container: textLayerDiv,
-                    viewport: viewport,
-                    textDivs: []
-                }).then(() => {
-                    // Once rendered, we need to mark these as TTS speakable
-                    const spans = textLayerDiv.querySelectorAll('span');
-                    let wordIndex = 0;
-                    spans.forEach(span => {
-                        const text = span.innerText.trim();
-                        // Only make chunks with actual words speakable
-                        if (text && text.length > 0 && !/^[\s]+$/.test(text)) {
-                            span.classList.add('tts-speakable');
-                            span.setAttribute('data-tts-index', wordIndex++);
-
-                            // Adjust styling so we can see the highlight
-                            span.style.color = 'transparent'; // keep original color hidden, we rely on canvas
-                            span.style.cursor = 'pointer';
-                            span.style.borderRadius = '2px';
-                        }
-                    });
-
-                    setLoading(false);
-                    if (onLoaded) onLoaded();
+                    viewport: viewport
                 });
+                await textLayer.render();
+                if (!active) return;
+
+                // Once rendered, we need to mark these as TTS speakable
+                const spans = textLayer.textDivs.length > 0 ? textLayer.textDivs : textLayerDiv.querySelectorAll('span');
+                let wordIndex = 0;
+                spans.forEach(span => {
+                    const text = span.innerText.trim();
+                    // Only make chunks with actual words speakable
+                    if (text && text.length > 0 && !/^[\s]+$/.test(text)) {
+                        span.classList.add('tts-speakable');
+                        span.setAttribute('data-tts-index', wordIndex++);
+
+                        // Adjust styling so we can see the highlight
+                        span.style.color = 'transparent'; // keep original color hidden, we rely on canvas
+                        span.style.cursor = 'pointer';
+                        span.style.borderRadius = '2px';
+                    }
+                });
+
+                setLoading(false);
+                if (onLoaded) onLoaded();
 
             } catch (err) {
                 if (err.name !== 'RenderingCancelledException') {

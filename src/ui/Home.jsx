@@ -1,10 +1,13 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
-import { canStoreBook, formatBytes } from '../core/quotaManager';
+import { isSupportedFile } from '../core/parsers';
+import { canStoreBook } from '../core/quotaManager';
 import { Upload, Book, Trash2, FileText, Clock } from 'lucide-react';
 import { useToast } from './components/Toast';
 import { Skeleton } from './components/Skeleton';
+
+const SUPPORTED_EXTENSIONS = bookStore.getSupportedExtensions();
 
 export function Home() {
     const navigate = useNavigate();
@@ -24,13 +27,13 @@ export function Home() {
         setInitialLoading(false);
     };
 
-    const [supportedExts, setSupportedExts] = useState(['epub']);
-
     useEffect(() => {
-        refreshBooks();
-        // Get supported extensions from store (which gets them from parsers)
-        const exts = bookStore.getSupportedExtensions();
-        setSupportedExts(exts);
+        const loadBooks = async () => {
+            const list = await bookStore.getBooks();
+            setBooks(list);
+            setInitialLoading(false);
+        };
+        loadBooks();
 
         const loadSettings = async () => {
             const settings = await bookStore.getSettings('ttsConfig');
@@ -56,7 +59,7 @@ export function Home() {
     const getRemainingTime = (book) => {
         if (!book.toc || !book.lastProgress) return null;
 
-        const { spineIndex, nodeIndex } = book.lastProgress;
+        const { spineIndex } = book.lastProgress;
         let remainingWords = 0;
 
         // Current chapter partial (estimation since we don't know total nodes here)
@@ -86,13 +89,11 @@ export function Home() {
         return `${totalMins}m left`;
     };
 
-    const handleFile = async (file) => {
+    const handleFile = useCallback(async (file) => {
         if (!file) return;
 
-        const ext = file.name.split('.').pop().toLowerCase();
-        // Check if extension is supported
-        if (!supportedExts.includes(ext) && !file.type.includes('epub') && !file.type.includes('pdf')) {
-            alert(`Please select a supported file (${supportedExts.join(', ')}).`);
+        if (!isSupportedFile(file.name, file.type)) {
+            showToast(`Please select a supported file (${SUPPORTED_EXTENSIONS.join(', ')}).`, 'warning');
             return;
         }
 
@@ -109,7 +110,7 @@ export function Home() {
             }
 
             const buffer = await file.arrayBuffer();
-            const id = await bookStore.addBook(buffer, file.name);
+            const id = await bookStore.addBook(buffer, file.name, file.type);
             navigate(`/book/${id}/toc`);
         } catch (err) {
             console.error(err);
@@ -120,7 +121,7 @@ export function Home() {
             }
             setLoading(false);
         }
-    };
+    }, [navigate, showToast]);
 
     const handlePaste = async () => {
         if (!pastedText.trim()) return;
@@ -159,7 +160,7 @@ export function Home() {
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             handleFile(e.dataTransfer.files[0]);
         }
-    }, []);
+    }, [handleFile]);
 
     const onDragOver = useCallback((e) => { e.preventDefault(); setIsDragging(true); }, []);
     const onDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false); }, []);
@@ -345,14 +346,14 @@ export function Home() {
                                 Processing...
                             </span>
                         ) : (
-                            `Add a book (${supportedExts.join(', ').toUpperCase()})`
+                            `Add a book (${SUPPORTED_EXTENSIONS.join(', ').toUpperCase()})`
                         )}
                     </div>
                     <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', opacity: 0.5 }}>or drag and drop</p>
                     <input
                         type="file"
                         id="file-input"
-                        accept={supportedExts.map(e => `.${e}`).join(',')}
+                        accept={SUPPORTED_EXTENSIONS.map(e => `.${e}`).join(',')}
                         style={{ display: 'none' }}
                         onChange={onBrowse}
                     />

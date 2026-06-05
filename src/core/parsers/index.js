@@ -26,6 +26,10 @@ export function getParserForFile(fileName, mimeType = '') {
     return null;
 }
 
+export function isSupportedFile(fileName, mimeType = '') {
+    return Boolean(getParserForFile(fileName, mimeType));
+}
+
 /**
  * Get list of all supported file extensions
  * @returns {string[]}
