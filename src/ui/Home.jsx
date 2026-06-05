@@ -210,7 +210,7 @@ export function Home() {
                         role="button"
                         aria-label={`Open ${book.title || 'book'}`}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/book/${book.id}/toc`); } }}
-                        className="interactive-card"
+                        className="interactive-card book-card"
                         style={{
                             background: 'var(--bg-secondary)',
                             borderRadius: '12px',
@@ -232,6 +232,7 @@ export function Home() {
                             <img
                                 src={book.cover}
                                 alt={book.title}
+                                className="book-cover"
                                 style={{
                                     width: '100%',
                                     height: '65%',
@@ -242,7 +243,7 @@ export function Home() {
                                 }}
                             />
                         ) : (
-                            <div style={{
+                            <div className="book-cover book-cover-placeholder" style={{
                                 height: '65%',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -252,10 +253,10 @@ export function Home() {
                                 borderRadius: '8px',
                                 marginBottom: '0.75rem'
                             }}>
-                                <Book size={48} style={{ opacity: 0.15, color: 'var(--text-secondary)' }} />
+                                <Book className="book-placeholder-icon" size={48} style={{ opacity: 0.15, color: 'var(--text-secondary)' }} />
                             </div>
                         )}
-                        <h4 style={{
+                        <h4 className="book-title" style={{
                             margin: '0 0 0.25rem 0',
                             fontSize: '0.9rem',
                             fontWeight: 600,
@@ -264,7 +265,7 @@ export function Home() {
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden'
                         }}>{book.title || 'Unknown Title'}</h4>
-                        <p style={{
+                        <p className="book-author" style={{
                             margin: 0,
                             fontSize: '0.75rem',
                             opacity: 0.6,
@@ -275,7 +276,7 @@ export function Home() {
                         }}>{book.author || 'Unknown Author'}</p>
 
                         {(book.totalWords || (book.toc && book.toc.reduce((a, c) => a + (c.words || 0), 0))) > 0 && (
-                            <div style={{
+                            <div className="book-reading-time" style={{
                                 marginTop: '0.75rem',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -318,10 +319,10 @@ export function Home() {
                 )))}
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem' }}>
+            <div className="import-actions" style={{ display: 'flex', gap: '1rem' }}>
                 {/* Upload Zone */}
                 <div
-                    className="drop-zone interactive-card"
+                    className="drop-zone interactive-card import-action"
                     onDrop={onDrop}
                     onDragOver={onDragOver}
                     onDragLeave={onDragLeave}
@@ -369,7 +370,7 @@ export function Home() {
                     role="button"
                     aria-label="Paste text content"
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowPasteModal(true); }}
-                    className="interactive-card"
+                    className="interactive-card import-action"
                     style={{
                         flex: 1,
                         border: '2px dashed var(--border-color)',

@@ -2,8 +2,17 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { bookStore } from '../core/bookStore';
 import { getParserForFile } from '../core/parsers';
-import { BookOpen, Clock, Bookmark, Trash2 } from 'lucide-react';
+import { Clock, Bookmark, Trash2 } from 'lucide-react';
 import { Skeleton } from './components/Skeleton';
+
+const SKELETON_ROWS = [
+    { titleWidth: '72%', metaWidth: '34%' },
+    { titleWidth: '61%', metaWidth: '28%' },
+    { titleWidth: '78%', metaWidth: '39%' },
+    { titleWidth: '55%', metaWidth: '24%' },
+    { titleWidth: '68%', metaWidth: '31%' },
+    { titleWidth: '74%', metaWidth: '36%' }
+];
 
 export function TOC() {
     const { id } = useParams();
@@ -125,7 +134,7 @@ export function TOC() {
             <Skeleton width="40%" height="1rem" style={{ marginBottom: '0.5rem' }} />
             <Skeleton width="150px" height="1rem" style={{ marginBottom: '2rem' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {Array.from({ length: 6 }, (_, i) => (
+                {SKELETON_ROWS.map((row, i) => (
                     <div key={i} style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -136,8 +145,8 @@ export function TOC() {
                     }}>
                         <Skeleton width="24px" height="24px" style={{ borderRadius: '50%', flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
-                            <Skeleton width={`${50 + Math.random() * 30}%`} height="1rem" style={{ marginBottom: '0.35rem' }} />
-                            <Skeleton width={`${20 + Math.random() * 20}%`} height="0.75rem" />
+                            <Skeleton width={row.titleWidth} height="1rem" style={{ marginBottom: '0.35rem' }} />
+                            <Skeleton width={row.metaWidth} height="0.75rem" />
                         </div>
                     </div>
                 ))}
@@ -203,7 +212,7 @@ export function TOC() {
                             role="button"
                             aria-label={`Chapter ${index + 1}: ${chapter.title || ''}`}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/book/${id}/read/${index}`); } }}
-                            className="interactive-card"
+                            className="interactive-card chapter-item"
                             style={{
                                 padding: '0.9rem 1rem',
                                 border: '1px solid var(--border-color)',
@@ -214,9 +223,9 @@ export function TOC() {
                                 position: 'relative'
                             }}
                         >
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', minWidth: '24px', textAlign: 'center' }}>{index + 1}</span>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{chapter.title || chapter.label || `Chapter ${index + 1}`}</div>
+                            <span className="chapter-index" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', minWidth: '24px', textAlign: 'center' }}>{index + 1}</span>
+                            <div className="chapter-main" style={{ flex: 1 }}>
+                                <div className="chapter-title" style={{ fontWeight: 500, fontSize: '0.9rem' }}>{chapter.title || chapter.label || `Chapter ${index + 1}`}</div>
                                 {chapter.words > 0 && (
                                     <div style={{
                                         fontSize: '0.75rem',
@@ -248,7 +257,7 @@ export function TOC() {
                             tabIndex={0}
                             role="button"
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navigate(`/book/${id}/read/${b.spineIndex}?node=${b.nodeIndex}`); } }}
-                            className="interactive-card"
+                            className="interactive-card toc-bookmark-item"
                             style={{
                                 padding: '0.9rem 1rem',
                                 border: '1px solid var(--border-color)',
@@ -259,8 +268,8 @@ export function TOC() {
                                 position: 'relative'
                             }}
                         >
-                            <div style={{ flex: 1 }}>
-                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--text-primary)', opacity: 0.85 }}>
+                            <div className="toc-bookmark-main" style={{ flex: 1 }}>
+                                <p className="toc-bookmark-text" style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--text-primary)', opacity: 0.85 }}>
                                     "{b.text}"
                                 </p>
                                 <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>

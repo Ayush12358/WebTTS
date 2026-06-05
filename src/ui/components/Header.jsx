@@ -57,7 +57,7 @@ export function Header() {
     };
 
     return (
-        <header style={{
+        <header className="app-header" style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -69,7 +69,7 @@ export function Header() {
             zIndex: 50
         }}>
             {/* Left */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+            <div className="header-title-area" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
                 {!isHome && (
                     <button onClick={handleBack} className="icon-btn" aria-label="Go back" style={{ flexShrink: 0 }}>
                         <ArrowLeft size={18} />
@@ -77,6 +77,7 @@ export function Header() {
                 )}
                 <Link
                     to="/"
+                    className="header-title"
                     style={{
                         textDecoration: 'none', color: 'var(--text-primary)',
                         fontWeight: 700, fontSize: '1rem',
@@ -89,7 +90,7 @@ export function Header() {
             </div>
 
             {/* Right */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
+            <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
                 {(bookId || isHome) && (
                     <button
                         onClick={handleBookmarkClick}
@@ -119,4 +120,3 @@ export function Header() {
         </header>
     );
 }
-

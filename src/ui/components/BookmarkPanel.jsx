@@ -60,7 +60,7 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
             {/* Search */}
             {bookmarks.length > 2 && (
                 <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
-                    <div style={{
+                    <div className="bookmark-search-box" style={{
                         display: 'flex', alignItems: 'center', gap: '0.5rem',
                         padding: '0.4rem 0.6rem',
                         background: 'var(--bg-secondary)',
@@ -78,6 +78,7 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
                                 background: 'transparent',
                                 outline: 'none',
                                 flex: 1,
+                                minWidth: 0,
                                 fontSize: '0.85rem',
                                 color: 'var(--text-primary)'
                             }}
@@ -120,6 +121,7 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
 
                         return (
                             <div
+                                className="bookmark-panel-item"
                                 key={b.id}
                                 style={{
                                     padding: '0.6rem 0.75rem',
@@ -160,7 +162,7 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
                                         </span>
                                     )}
                                 </p>
-                                <div style={{
+                                <div className="bookmark-panel-meta" style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
                                     alignItems: 'center'

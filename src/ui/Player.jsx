@@ -28,7 +28,7 @@ export function Player() {
     const [showBookmarks, setShowBookmarks] = useState(false);
     const { registerBookmarks, clearBookmarks } = useHeaderActions();
 
-    const [ttsConfig, setTtsConfig] = useTTSConfig();
+    const [ttsConfig] = useTTSConfig();
 
     // Playback State
     const [currentIndex, setCurrentIndex] = useState(-1);
@@ -312,7 +312,9 @@ export function Player() {
             let audioObject = null;
             if (prefetchRef.current.index === index && prefetchRef.current.promise) {
                 console.log('Resolving prefetch for index:', index);
-                audioObject = await prefetchRef.current.promise;
+                audioObject = await new Promise((resolve, reject) => {
+                    Promise.resolve(prefetchRef.current.promise).then(resolve, reject);
+                });
                 prefetchRef.current = { index: -1, promise: null }; // Consume
             }
 
@@ -331,7 +333,7 @@ export function Player() {
                 };
             }
 
-            await speechEngine.speak(item.text, {
+            speechEngine.speak(item.text, {
                 voiceId: ttsConfig.voiceId,
                 rate: ttsConfig.rate,
                 pitch: ttsConfig.pitch,
@@ -389,13 +391,6 @@ export function Player() {
             let start = currentIndex >= 0 ? currentIndex : 0;
             playFromIndex(start);
         }
-    };
-
-    const handleBookmark = async () => {
-        if (currentIndex < 0 || !currentNodes.current[currentIndex]) {
-            return;
-        }
-        await saveBookmark(currentSpineIndex, currentIndex, currentNodes.current[currentIndex].text);
     };
 
     const saveBookmark = useCallback(async (spineIndex, nodeIndex, text) => {
@@ -602,7 +597,8 @@ export function Player() {
                     padding: '1rem 1rem 5rem 1rem',
                     lineHeight: '1.7',
                     fontSize: '1.05rem',
-                    touchAction: 'pan-y pinch-zoom'
+                    touchAction: 'pan-y pinch-zoom',
+                    overflowWrap: 'anywhere'
                 }}
             >
                 <button
@@ -623,7 +619,7 @@ export function Player() {
                 </button>
 
                 {nativePdfPayload ? (
-                    <div ref={contentRef} onClick={handleContentClick} style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div ref={contentRef} onClick={handleContentClick} style={{ display: 'flex', justifyContent: 'center', minWidth: 0 }}>
                         <PDFPageView
                             pdfData={nativePdfPayload.binaryData}
                             pageIndex={nativePdfPayload.pageIndex}
@@ -631,7 +627,7 @@ export function Player() {
                         />
                     </div>
                 ) : (
-                    <div ref={contentRef} onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: chapterContent }} />
+                    <div className="reader-html-content" ref={contentRef} onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: chapterContent }} />
                 )}
 
                 <button
@@ -667,7 +663,7 @@ export function Player() {
                 onClose={() => setShowBookmarks(false)}
             />
 
-            <div style={{
+            <div className="reader-controls-shell" style={{
                 flexShrink: 0,
                 background: 'var(--bg-primary)',
                 borderTop: '1px solid var(--border-color)',

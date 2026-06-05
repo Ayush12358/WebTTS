@@ -1,9 +1,8 @@
-import React from 'react';
 import { Play, Pause, SkipBack, SkipForward, Clock } from 'lucide-react';
 
 export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
     return (
-        <div style={{
+        <div className="reader-controls" style={{
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5rem',
             padding: '0.25rem 1rem',
             position: 'relative'
@@ -42,7 +41,7 @@ export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
             </button>
 
             {timeLeft && (
-                <div style={{
+                <div className="reader-time-left" style={{
                     position: 'absolute',
                     right: '0.5rem',
                     fontSize: '0.75rem',
