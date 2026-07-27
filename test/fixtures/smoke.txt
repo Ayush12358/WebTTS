@@ -1,6 +1,0 @@
-<script>alert('not executable')</script>
-
-This is the first local paragraph.
-It keeps a hard line break.
-
-This is the second paragraph.
