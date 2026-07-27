@@ -9,6 +9,31 @@ import { BookmarkPanel } from './components/BookmarkPanel';
 import { Skeleton } from './components/Skeleton';
 import { useHeaderActions } from './components/HeaderActions';
 import { useTTSConfig } from '../core/useTTSConfig';
+import { getElementSegment, prepareHtmlContent, splitTextIntoSegments } from '../core/content';
+
+function resolveSegmentTarget(target, root) {
+    let node = target;
+    while (node && node !== root) {
+        const direct = getElementSegment(node);
+        if (direct) return { ...direct, node };
+
+        const groupIndex = node.getAttribute?.('data-tts-segment-index');
+        if (groupIndex !== null && groupIndex !== undefined) {
+            const leader = root.querySelector(`[data-tts-index="${groupIndex}"]`);
+            const segment = getElementSegment(leader);
+            if (segment) return { ...segment, node: leader };
+        }
+        node = node.parentNode;
+    }
+    return null;
+}
+
+function setSegmentClass(root, index, className, enabled) {
+    if (!root) return;
+    root.querySelectorAll(`[data-tts-index="${index}"], [data-tts-segment-index="${index}"]`).forEach(node => {
+        node.classList.toggle(className, enabled);
+    });
+}
 
 export function Player() {
     const { id, cfi } = useParams();
@@ -32,6 +57,7 @@ export function Player() {
 
     // Playback State
     const [currentIndex, setCurrentIndex] = useState(-1);
+    const [currentNodeCount, setCurrentNodeCount] = useState(0);
     const [searchParams] = useSearchParams();
     const currentNodes = useRef([]); // Speakable nodes
     const navigate = useNavigate();
@@ -46,6 +72,81 @@ export function Player() {
 
     // Auto-scroll dedup ref
     const lastScrolledIndex = useRef(-1);
+    const longPressTimer = useRef(null);
+    const lastPointerPos = useRef({ x: 0, y: 0 });
+    const isLongPress = useRef(false);
+    const swipeStart = useRef({ x: 0, y: 0, active: false });
+    const isVerticalScroll = useRef(false);
+    const SWIPE_THRESHOLD = 50;
+    const loadRequestRef = useRef(0);
+    const playbackRequestRef = useRef(0);
+    const previousTtsConfigRef = useRef(null);
+    const resumeOnConfigChangeRef = useRef(false);
+
+    const loadBookmarks = useCallback(async () => {
+        const list = await bookStore.getBookmarks(id);
+        setBookmarks(list);
+    }, [id]);
+
+    const loadChapter = useCallback(async (currentParser, bookInstance, index, jumpToNode = -1) => {
+        const requestId = ++loadRequestRef.current;
+        setLoading(true);
+        setPlaying(false);
+        setError(null);
+        setCurrentIndex(jumpToNode >= 0 ? jumpToNode : 0);
+        setCurrentNodeCount(0);
+        currentNodes.current = [];
+        lastScrolledIndex.current = -1;
+        prefetchRef.current = { index: -1, promise: null };
+        resumeOnConfigChangeRef.current = false;
+        try {
+            const result = await currentParser.getChapterContent(bookInstance, index);
+            if (requestId !== loadRequestRef.current) return;
+
+            if (result.kind === 'pdf-page') {
+                const cachedOcr = await bookStore.getPdfOcr(id, result.pageIndex - 1);
+                if (requestId !== loadRequestRef.current) return;
+                const payload = cachedOcr?.text
+                    ? {
+                        ...result,
+                        segments: splitTextIntoSegments(cachedOcr.text),
+                        ocrWords: cachedOcr.words || [],
+                        empty: false
+                    }
+                    : result;
+                setChapterContent('');
+                setNativePdfPayload(payload);
+            } else {
+                setNativePdfPayload(null);
+                const prepared = prepareHtmlContent(result.html || '');
+                setChapterContent(prepared.html);
+                setLoading(false);
+            }
+        } catch (e) {
+            if (requestId !== loadRequestRef.current) return;
+            console.error("Failed to load chapter", e);
+            setError("Failed to load chapter.");
+            setLoading(false);
+        }
+    }, [id]);
+
+    const handlePdfOcr = useCallback(async (result, pageIndex) => {
+        setNativePdfPayload(current => {
+            if (!current || current.pageIndex !== pageIndex + 1) return current;
+            return {
+                ...current,
+                segments: splitTextIntoSegments(result.text),
+                ocrWords: result.words,
+                empty: false
+            };
+        });
+        try {
+            await bookStore.savePdfOcr(id, pageIndex, result);
+        } catch (e) {
+            console.error('Failed to cache PDF OCR result', e);
+        }
+    }, [id]);
+
 
     // Load Book
     useEffect(() => {
@@ -64,7 +165,6 @@ export function Player() {
                     return;
                 }
 
-                setBookMeta(metadata);
                 const bookParser = getParserForFile(metadata.fileName);
                 if (!bookParser) {
                     throw new Error(`No parser found for ${metadata.fileName}`);
@@ -73,6 +173,20 @@ export function Player() {
 
                 const parsed = await bookParser.parse(bookData, metadata.fileName);
                 setBook(parsed.instance);
+                const bookMetadata = metadata.tocVersion === 2 ? metadata : {
+                    ...metadata,
+                    toc: parsed.toc,
+                    tocVersion: 2,
+                    totalWords: parsed.toc.reduce((acc, chapter) => acc + (chapter.hidden ? 0 : chapter.words || 0), 0)
+                };
+                if (bookMetadata !== metadata) {
+                    await bookStore.updateBookMeta(id, {
+                        toc: bookMetadata.toc,
+                        tocVersion: bookMetadata.tocVersion,
+                        totalWords: bookMetadata.totalWords
+                    });
+                }
+                setBookMeta(bookMetadata);
 
                 // Resolve initial location
                 let spineIndex = 0;
@@ -95,6 +209,7 @@ export function Player() {
                 setCurrentSpineIndex(spineIndex);
                 setCurrentIndex(nodeIndex);
                 loadChapter(bookParser, parsed.instance, spineIndex, nodeIndex);
+                await loadBookmarks();
 
             } catch (err) {
                 console.error("Error loading book:", err);
@@ -103,112 +218,58 @@ export function Player() {
             }
         };
         loadBook();
-        loadBookmarks();
-    }, [id, navigate]);
+    }, [id, navigate, cfi, searchParams, loadBookmarks, loadChapter]);
 
     // Save settings when ttsConfig changes
     useEffect(() => {
         bookStore.saveSettings('ttsConfig', ttsConfig);
     }, [ttsConfig]);
 
-    const loadBookmarks = async () => {
-        const list = await bookStore.getBookmarks(id);
-        setBookmarks(list);
-    };
-
-    // Load Chapter Content
-    const loadChapter = async (currentParser, bookInstance, index, jumpToNode = -1) => {
-        setLoading(true);
-        setPlaying(false);
-        try {
-            const result = await currentParser.getChapterContent(bookInstance, index);
-
-            if (result.isPdfNative) {
-                // Bypass the HTML extraction entirely
-                setChapterContent('');
-                setNativePdfPayload(result);
-                // We don't set loading false yet, the PDFPageView will call a callback when done
-            } else {
-                setNativePdfPayload(null);
-                // Pre-process for TTS in a temporary container
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = result.html;
-
-                const elements = tempDiv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, span');
-                const items = [];
-                elements.forEach((el) => {
-                    const text = el.innerText.trim();
-                    // Avoid nested speakables
-                    if (text && !el.closest('.tts-speakable')) {
-                        el.setAttribute('data-tts-index', items.length);
-                        el.classList.add('tts-speakable');
-                        items.push({ text, id: items.length });
-                    }
-                });
-
-                setChapterContent(tempDiv.innerHTML);
-                setLoading(false);
-
-                // If we have a jumpToNode, wait for render then jump
-                if (jumpToNode >= 0) {
-                    // The useEffect for chapterContent will handle the scrolling
-                }
-            }
-        } catch (e) {
-            console.error("Failed to load chapter", e);
-            setError("Failed to load chapter.");
-            setLoading(false);
-        }
-    };
 
     // Post-Render Processing: Find Nodes
     useEffect(() => {
-        if (!contentRef.current) return;
-        if (loading) return; // Wait until PDF or HTML is fully loaded
+        if (!contentRef.current || loading) return;
 
         const container = contentRef.current;
-        const elements = container.querySelectorAll('.tts-speakable');
-        const items = [];
-
-        elements.forEach((el) => {
-            const idx = parseInt(el.getAttribute('data-tts-index'));
-            const text = el.innerText.trim();
-            items.push({ text, node: el, index: idx });
-        });
+        const items = Array.from(container.querySelectorAll('.tts-speakable'))
+            .map(node => {
+                const segment = getElementSegment(node);
+                return segment ? { text: segment.text, node, index: segment.index } : null;
+            })
+            .filter(Boolean);
 
         currentNodes.current = items;
+        setCurrentNodeCount(items.length);
 
-        // Apply visual markers for existing bookmarks in this chapter
-        const chapterBookmarks = bookmarks.filter(b => parseInt(b.spineIndex) === currentSpineIndex);
-        chapterBookmarks.forEach(b => {
-            const target = items.find(n => n.index === parseInt(b.nodeIndex));
-            if (target) target.node.classList.add('is-bookmarked');
+        const chapterBookmarks = bookmarks.filter(b => parseInt(b.spineIndex, 10) === currentSpineIndex);
+        chapterBookmarks.forEach(bookmark => {
+            const index = parseInt(bookmark.nodeIndex, 10);
+            if (Number.isInteger(index)) setSegmentClass(container, index, 'is-bookmarked', true);
         });
 
-        // Jump to bookmarked line or saved progress
-        const nodeToJump = searchParams.get('node') || currentIndex;
-        if (nodeToJump !== null && nodeToJump >= 0 && items.length > 0) {
-            const idx = parseInt(nodeToJump);
-            const target = items.find(n => n.index === idx);
+        const rawNodeToJump = searchParams.get('node');
+        const nodeToJump = rawNodeToJump === null ? currentIndex : parseInt(rawNodeToJump, 10);
+        if (Number.isInteger(nodeToJump) && nodeToJump >= 0 && items.length > 0) {
+            const target = items.find(item => item.index === nodeToJump);
             if (target) {
                 setTimeout(() => {
                     target.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    target.node.classList.add('tts-active');
-                    // Remove highlight after a delay so it's not permanent unless playing
+                    setSegmentClass(container, nodeToJump, 'tts-active', true);
                     if (!playingRef.current) {
-                        setTimeout(() => target.node.classList.remove('tts-active'), 2000);
+                        setTimeout(() => setSegmentClass(container, nodeToJump, 'tts-active', false), 2000);
                     }
                 }, 100);
             }
         }
-    }, [chapterContent, nativePdfPayload, loading, searchParams, bookmarks]);
+    }, [chapterContent, nativePdfPayload, loading, searchParams, bookmarks, currentIndex, currentSpineIndex]);
 
     // Save progress when spine/node changes
     useEffect(() => {
         if (id && currentSpineIndex >= 0 && currentIndex >= 0) {
-            bookStore.saveProgress(id, currentSpineIndex, currentIndex);
+            const chapterId = bookMeta?.toc?.[currentSpineIndex]?.id || null;
+            bookStore.saveProgress(id, currentSpineIndex, currentIndex, chapterId);
         }
-    }, [id, currentSpineIndex, currentIndex]);
+    }, [id, currentSpineIndex, currentIndex, bookMeta]);
 
     const calculateTimeLeft = () => {
         if (!bookMeta?.toc || !ttsConfig.rate) return null;
@@ -217,14 +278,14 @@ export function Player() {
 
         // 1. Current chapter remaining
         const currentChapter = bookMeta.toc[currentSpineIndex];
-        if (currentChapter && currentNodes.current.length > 0) {
-            const progress = (currentIndex + 1) / currentNodes.current.length;
+        if (currentChapter && !currentChapter.hidden && currentNodeCount > 0) {
+            const progress = (currentIndex + 1) / currentNodeCount;
             remainingWords += currentChapter.words * (1 - progress);
         }
 
         // 2. Future chapters
         for (let i = currentSpineIndex + 1; i < bookMeta.toc.length; i++) {
-            remainingWords += (bookMeta.toc[i].words || 0);
+            if (!bookMeta.toc[i]?.hidden) remainingWords += (bookMeta.toc[i]?.words || 0);
         }
 
         const wpm = 200 * ttsConfig.rate;
@@ -263,11 +324,12 @@ export function Player() {
 
     // TTS Logic
     const playFromIndex = useCallback(async (index) => {
+        const requestId = ++playbackRequestRef.current;
         const currentEngine = engines[ttsConfig.engineId];
         if (currentEngine) currentEngine.stop();
         setPlaying(false);
         playingRef.current = false;
-        document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+        contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
 
         if (index < 0) return;
         if (index >= currentNodes.current.length) {
@@ -276,6 +338,7 @@ export function Player() {
         }
 
         await new Promise(r => setTimeout(r, 50));
+        if (requestId !== playbackRequestRef.current) return;
 
         setCurrentIndex(index);
         setPlaying(true);
@@ -284,8 +347,7 @@ export function Player() {
         const item = currentNodes.current[index];
         if (!item) return;
 
-        document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
-        item.node.classList.add('tts-active');
+        setSegmentClass(contentRef.current, index, 'tts-active', true);
 
         // Auto-scroll: only if not already scrolled to this index
         if (lastScrolledIndex.current !== index) {
@@ -315,6 +377,7 @@ export function Player() {
                 audioObject = await new Promise((resolve, reject) => {
                     Promise.resolve(prefetchRef.current.promise).then(resolve, reject);
                 });
+                if (requestId !== playbackRequestRef.current) return;
                 prefetchRef.current = { index: -1, promise: null }; // Consume
             }
 
@@ -346,7 +409,7 @@ export function Player() {
                 },
                 onError: (e) => {
                     console.error(e);
-                    setPlaying(false);
+                    if (requestId === playbackRequestRef.current) setPlaying(false);
                 }
             });
         } catch (e) {
@@ -356,42 +419,76 @@ export function Player() {
     }, [ttsConfig]);
 
     const handleContentClick = useCallback((e) => {
-        // If this click follows a long press, ignore it
         if (isLongPress.current) {
             isLongPress.current = false;
             return;
         }
 
-        let target = e.target;
-        while (target && target !== contentRef.current) {
-            if (target.getAttribute && target.getAttribute('data-tts-index')) {
-                const idx = parseInt(target.getAttribute('data-tts-index'));
-                e.stopPropagation();
-                playFromIndex(idx);
-                return;
-            }
-            target = target.parentNode;
+        const segment = resolveSegmentTarget(e.target, contentRef.current);
+        if (segment) {
+            e.stopPropagation();
+            playFromIndex(segment.index);
         }
     }, [playFromIndex]);
 
+
+    useEffect(() => {
+        const previousConfig = previousTtsConfigRef.current;
+        previousTtsConfigRef.current = ttsConfig;
+        if (!previousConfig) return;
+
+        const configChanged = ['engineId', 'voiceId', 'rate', 'pitch']
+            .some(key => previousConfig[key] !== ttsConfig[key]);
+        if (!configChanged) return;
+
+        const shouldResume = playingRef.current || resumeOnConfigChangeRef.current;
+        const resumeIndex = currentIndex;
+        resumeOnConfigChangeRef.current = shouldResume;
+        playbackRequestRef.current += 1;
+        playingRef.current = false;
+        engines[previousConfig.engineId]?.stop();
+        setPlaying(false);
+        contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+        prefetchRef.current = { index: -1, promise: null };
+
+        if (shouldResume && resumeIndex >= 0) {
+            const resumeConfig = ttsConfig;
+            setTimeout(() => {
+                if (previousTtsConfigRef.current !== resumeConfig || !resumeOnConfigChangeRef.current) return;
+                resumeOnConfigChangeRef.current = false;
+                playFromIndex(resumeIndex);
+            }, 0);
+        }
+    }, [ttsConfig, currentIndex, playFromIndex]);
+    useEffect(() => () => {
+        playbackRequestRef.current += 1;
+        playingRef.current = false;
+        resumeOnConfigChangeRef.current = false;
+        engines[previousTtsConfigRef.current?.engineId]?.stop();
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+        prefetchRef.current = { index: -1, promise: null };
+    }, []);
     useEffect(() => { playNextRef.current = playFromIndex; }, [playFromIndex]);
 
-    const stopTTS = () => {
+    const stopTTS = useCallback(() => {
         playingRef.current = false;
+        resumeOnConfigChangeRef.current = false;
+        playbackRequestRef.current += 1;
         setPlaying(false);
         const engine = engines[ttsConfig.engineId];
         if (engine) engine.stop();
-        document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
-    };
+        contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+    }, [ttsConfig.engineId]);
 
-    const togglePlay = () => {
+    const togglePlay = useCallback(() => {
         if (playing) {
             stopTTS();
         } else {
-            let start = currentIndex >= 0 ? currentIndex : 0;
+            const start = currentIndex >= 0 ? currentIndex : 0;
             playFromIndex(start);
         }
-    };
+    }, [playing, currentIndex, playFromIndex, stopTTS]);
 
     const saveBookmark = useCallback(async (spineIndex, nodeIndex, text) => {
         try {
@@ -407,17 +504,18 @@ export function Player() {
                 await bookStore.removeBookmark(id, existing.id);
                 setBookmarks(prev => prev.filter(b => b.id !== existing.id));
                 const target = currentNodes.current.find(n => n.index === ni);
-                if (target) target.node.classList.remove('is-bookmarked');
+                if (target) setSegmentClass(contentRef.current, ni, 'is-bookmarked', false);
             } else {
-                const newB = await bookStore.addBookmark(id, si, ni, text);
+                const chapterId = bookMeta?.toc?.[si]?.id || null;
+                const newB = await bookStore.addBookmark(id, si, ni, text, chapterId);
                 setBookmarks(prev => [...prev, newB]);
                 const target = currentNodes.current.find(n => n.index === ni);
-                if (target) target.node.classList.add('is-bookmarked');
+                if (target) setSegmentClass(contentRef.current, ni, 'is-bookmarked', true);
             }
         } catch (e) {
             console.error("Failed to toggle bookmark", e);
         }
-    }, [id, bookmarks]);
+    }, [id, bookmarks, bookMeta]);
 
     const handleContextMenu = useCallback((e) => {
         e.preventDefault();
@@ -434,27 +532,12 @@ export function Player() {
             longPressTimer.current = null;
         }
 
-        let target = e.target;
-        while (target && target !== contentRef.current) {
-            if (target.getAttribute && target.getAttribute('data-tts-index')) {
-                const idx = parseInt(target.getAttribute('data-tts-index'));
-                const text = target.innerText.trim();
-                saveBookmark(currentSpineIndex, idx, text);
-                return;
-            }
-            target = target.parentNode;
+        const segment = resolveSegmentTarget(e.target, contentRef.current);
+        if (segment) {
+            saveBookmark(currentSpineIndex, segment.index, segment.text);
         }
     }, [saveBookmark, currentSpineIndex]);
 
-    // Unified Pointer Logic (Mouse + Touch)
-    const longPressTimer = useRef(null);
-    const lastPointerPos = useRef({ x: 0, y: 0 });
-    const isLongPress = useRef(false);
-
-    // Swipe tracking
-    const swipeStart = useRef({ x: 0, y: 0, active: false });
-    const isVerticalScroll = useRef(false);
-    const SWIPE_THRESHOLD = 50; // min horizontal px to trigger swipe
 
     const handlePointerDown = useCallback((e) => {
         // Only trigger for primary button (left click / single touch)
@@ -465,24 +548,16 @@ export function Player() {
         swipeStart.current = { x: e.clientX, y: e.clientY, active: true };
         isVerticalScroll.current = false;
 
-        let target = e.target;
-        while (target && target !== contentRef.current) {
-            if (target.getAttribute && target.getAttribute('data-tts-index')) {
-                const idx = parseInt(target.getAttribute('data-tts-index'));
-                const text = target.innerText.trim();
+        const segment = resolveSegmentTarget(e.target, contentRef.current);
+        if (!segment) return;
 
-                lastPointerPos.current = { x: e.clientX, y: e.clientY };
-
-                longPressTimer.current = setTimeout(() => {
-                    isLongPress.current = true;
-                    if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
-                    saveBookmark(currentSpineIndex, idx, text);
-                    longPressTimer.current = null;
-                }, 500);
-                return;
-            }
-            target = target.parentNode;
-        }
+        lastPointerPos.current = { x: e.clientX, y: e.clientY };
+        longPressTimer.current = setTimeout(() => {
+            isLongPress.current = true;
+            if (navigator.vibrate) navigator.vibrate(50);
+            saveBookmark(currentSpineIndex, segment.index, segment.text);
+            longPressTimer.current = null;
+        }, 500);
     }, [saveBookmark, currentSpineIndex]);
 
     const handlePointerUp = useCallback((e) => {
@@ -543,7 +618,8 @@ export function Player() {
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+            const tagName = e.target.tagName;
+            if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(tagName) || e.target.isContentEditable) return;
             if (e.key === 'Escape') { setShowBookmarks(false); return; }
             if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
             if (e.key === 'ArrowRight') { e.preventDefault(); playFromIndex(currentIndex + 1); return; }
@@ -551,7 +627,7 @@ export function Player() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentIndex]);
+    }, [currentIndex, playFromIndex, togglePlay]);
 
     // Register the bookmark toggle with the global header
     useEffect(() => {
@@ -621,8 +697,13 @@ export function Player() {
                 {nativePdfPayload ? (
                     <div ref={contentRef} onClick={handleContentClick} style={{ display: 'flex', justifyContent: 'center', minWidth: 0 }}>
                         <PDFPageView
-                            pdfData={nativePdfPayload.binaryData}
+                            key={`${nativePdfPayload.pageIndex}-${nativePdfPayload.ocrWords?.length ? 'ocr' : 'text'}`}
+                            pdfData={nativePdfPayload.pdfData}
                             pageIndex={nativePdfPayload.pageIndex}
+                            segments={nativePdfPayload.segments}
+                            empty={nativePdfPayload.empty}
+                            ocrWords={nativePdfPayload.ocrWords}
+                            onOcr={handlePdfOcr}
                             onLoaded={() => setLoading(false)}
                         />
                     </div>
@@ -675,6 +756,8 @@ export function Player() {
                     onNext={() => playFromIndex(currentIndex + 1)}
                     onPrev={() => playFromIndex(currentIndex - 1)}
                     timeLeft={timeLeft}
+                    canPrev={currentIndex > 0}
+                    canNext={currentIndex >= 0 && currentIndex < currentNodeCount - 1}
                 />
             </div>
 

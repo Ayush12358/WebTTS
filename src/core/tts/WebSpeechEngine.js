@@ -8,26 +8,33 @@ export class WebSpeechEngine extends TTSEngine {
     }
 
     async init() {
-        // Some browsers need a moment to load voices
-        return new Promise((resolve) => {
-            if (window.speechSynthesis.getVoices().length > 0) {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
+        if (window.speechSynthesis.getVoices().length > 0) return;
+
+        await new Promise(resolve => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                window.speechSynthesis.removeEventListener?.('voiceschanged', finish);
                 resolve();
-            } else {
-                window.speechSynthesis.onvoiceschanged = () => resolve();
-            }
+            };
+            const timeout = setTimeout(finish, 1500);
+            window.speechSynthesis.addEventListener?.('voiceschanged', finish);
         });
     }
 
     async getVoices() {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return [];
         const voices = window.speechSynthesis.getVoices();
-        return voices
-            .filter(v => v.lang.startsWith('en'))
-            .map(v => ({
-                id: v.name,
-                name: v.name,
-                lang: v.lang,
-                source: 'WebSpeech'
-            }));
+        const englishVoices = voices.filter(voice => voice.lang?.toLowerCase().startsWith('en'));
+        return (englishVoices.length ? englishVoices : voices).map(voice => ({
+            id: voice.name,
+            name: voice.name,
+            lang: voice.lang,
+            source: 'WebSpeech'
+        }));
     }
 
     speak(text, options = {}, callbacks = {}) {
@@ -44,7 +51,7 @@ export class WebSpeechEngine extends TTSEngine {
 
         if (options.rate) utterance.rate = options.rate;
         if (options.pitch) utterance.pitch = options.pitch;
-        if (options.volume) utterance.volume = options.volume;
+        if (options.volume !== undefined) utterance.volume = options.volume;
 
         utterance.onstart = () => {
             if (callbacks.onStart) callbacks.onStart();

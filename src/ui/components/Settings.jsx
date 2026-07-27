@@ -2,18 +2,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { getAvailableEngines, engines } from '../../core/tts';
 import { bookStore } from '../../core/bookStore';
 import { formatBytes } from '../../core/quotaManager';
-import { Settings as SettingsIcon, X, Key, HardDrive, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, X, HardDrive, Trash2 } from 'lucide-react';
+import { useToast } from './Toast';
 
 export function Settings({ config, onConfigChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [voiceList, setVoiceList] = useState([]);
-    const [apiKeys, setApiKeys] = useState({
-        googleCloud: localStorage.getItem('googleCloudTTSApiKey') || ''
-    });
+    const [voicesLoading, setVoicesLoading] = useState(false);
     const [storageInfo, setStorageInfo] = useState({ usage: 0, quota: 0, percentUsed: 0 });
+    const { showToast } = useToast();
 
     const availableEngines = getAvailableEngines();
-    const currentEngineInfo = availableEngines.find(e => e.id === config.engineId);
 
     // Close on Escape
     const handleKeyDown = useCallback((e) => {
@@ -31,21 +30,34 @@ export function Settings({ config, onConfigChange }) {
 
         const loadVoices = async () => {
             const engine = engines[config.engineId];
-            if (engine) {
+            if (!engine) return;
+            setVoicesLoading(true);
+            try {
                 const voices = await engine.getVoices();
                 setVoiceList(voices);
+            } catch (error) {
+                console.error('Failed to load voices', error);
+                setVoiceList([]);
+                showToast('Could not load voices for this engine.', 'warning');
+            } finally {
+                setVoicesLoading(false);
             }
         };
 
         const loadStorage = async () => {
-            const info = await bookStore.getStorageUsage();
-            setStorageInfo(info);
+            try {
+                const info = await bookStore.getStorageUsage();
+                setStorageInfo(info);
+            } catch (error) {
+                console.error('Failed to load storage usage', error);
+                showToast('Storage usage is unavailable.', 'warning');
+            }
         };
 
         checkEngine();
-        loadVoices();
+        if (isOpen) loadVoices();
         if (isOpen) loadStorage();
-    }, [config.engineId, apiKeys, isOpen]);
+    }, [config, onConfigChange, isOpen, showToast]);
 
     const handleEngineChange = (e) => {
         onConfigChange({ ...config, engineId: e.target.value, voiceId: '' });
@@ -63,18 +75,18 @@ export function Settings({ config, onConfigChange }) {
         onConfigChange({ ...config, pitch: parseFloat(e.target.value) });
     };
 
-    const saveGoogleApiKey = () => {
-        engines.googleCloud.setApiKey(apiKeys.googleCloud);
-        alert('Google Cloud API key saved!');
-        // Reload voices
-        onConfigChange({ ...config });
-    };
 
     const handleClearAllBooks = async () => {
         if (!window.confirm('Delete ALL books? This cannot be undone.')) return;
-        await bookStore.clearAllBooks();
-        const info = await bookStore.getStorageUsage();
-        setStorageInfo(info);
+        try {
+            await bookStore.clearAllBooks();
+            const info = await bookStore.getStorageUsage();
+            setStorageInfo(info);
+            showToast('All books deleted.', 'info');
+        } catch (error) {
+            console.error('Failed to delete all books', error);
+            showToast('Could not delete all books.', 'error');
+        }
     };
 
     if (!isOpen) {
@@ -86,27 +98,34 @@ export function Settings({ config, onConfigChange }) {
     }
 
     return (
-        <div className="settings-panel slide-panel" style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0,
-            width: 'clamp(280px, 80vw, 320px)',
-            background: 'var(--bg-primary)',
-            boxShadow: '-4px 0 24px var(--shadow-lg)',
-            padding: '1rem',
-            zIndex: 100,
-            display: 'flex', flexDirection: 'column', gap: '1rem',
-            borderLeft: '1px solid var(--border-color)',
-            overflowY: 'auto'
-        }}>
+        <div
+            className="settings-panel slide-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+            style={{
+                position: 'absolute', top: 0, right: 0, bottom: 0,
+                width: 'clamp(280px, 80vw, 320px)',
+                background: 'var(--bg-primary)',
+                boxShadow: '-4px 0 24px var(--shadow-lg)',
+                padding: '1rem',
+                zIndex: 100,
+                display: 'flex', flexDirection: 'column', gap: '1rem',
+                borderLeft: '1px solid var(--border-color)',
+                overflowY: 'auto'
+            }}
+        >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: '1rem' }}>Settings</h3>
+                <h3 id="settings-title" style={{ margin: 0, fontSize: '1rem' }}>Settings</h3>
                 <button onClick={() => setIsOpen(false)} className="icon-btn" aria-label="Close settings">
                     <X size={18} />
                 </button>
             </div>
 
             <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>TTS Engine</label>
+                <label htmlFor="tts-engine" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>TTS Engine</label>
                 <select
+                    id="tts-engine"
                     value={config.engineId}
                     onChange={handleEngineChange}
                     style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
@@ -117,43 +136,17 @@ export function Settings({ config, onConfigChange }) {
                 </select>
             </div>
 
-            {/* API Key Configuration for cloud services */}
-            {currentEngineInfo?.requiresKey && (
-                <div style={{
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(59, 130, 246, 0.3)'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                        <Key size={16} />
-                        <strong>API Configuration</strong>
-                    </div>
-
-                    {config.engineId === 'googleCloud' && (
-                        <div>
-                            <input
-                                type="password"
-                                placeholder="Google Cloud API Key"
-                                value={apiKeys.googleCloud}
-                                onChange={(e) => setApiKeys({ ...apiKeys, googleCloud: e.target.value })}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.5rem' }}
-                            />
-                            <button onClick={saveGoogleApiKey} style={{ width: '100%', padding: '0.5rem' }}>
-                                Save API Key
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
 
             <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Voice</label>
+                <label htmlFor="tts-voice" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Voice</label>
                 <select
+                    id="tts-voice"
                     value={config.voiceId}
                     onChange={handleVoiceChange}
+                    disabled={voicesLoading}
                     style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
                 >
+                    <option value="">{voicesLoading ? 'Loading voices…' : 'System default'}</option>
                     {voiceList.map(v => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
@@ -161,8 +154,9 @@ export function Settings({ config, onConfigChange }) {
             </div>
 
             <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Speed ({config.rate}x)</label>
+                <label htmlFor="tts-rate" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Speed ({config.rate}x)</label>
                 <input
+                    id="tts-rate"
                     type="range"
                     min="0.5"
                     max="2"
@@ -174,8 +168,9 @@ export function Settings({ config, onConfigChange }) {
             </div>
 
             <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Pitch ({config.pitch})</label>
+                <label htmlFor="tts-pitch" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Pitch ({config.pitch})</label>
                 <input
+                    id="tts-pitch"
                     type="range"
                     min="0.5"
                     max="2"
@@ -248,7 +243,6 @@ export function Settings({ config, onConfigChange }) {
                 <p style={{ margin: '0 0 0.5rem 0' }}>
                     {config.engineId === 'webSpeech' && 'Uses your device\'s built-in voices.'}
                     {config.engineId === 'edgeTTS' && 'High-quality neural voices from Microsoft Edge.'}
-                    {config.engineId === 'googleCloud' && 'Get API key from Google Cloud Console.'}
                 </p>
                 <a
                     href="/test-tts"

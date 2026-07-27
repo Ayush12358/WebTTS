@@ -20,10 +20,12 @@ export default async function handler(req, res) {
         // 1. Clock Sync
         let serverTime = Date.now();
         try {
-            const timeRes = await fetch('https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=' + TRUSTED_CLIENT_TOKEN, { method: 'HEAD' });
-            const dateHeader = timeRes.headers.get('date');
-            if (dateHeader) serverTime = new Date(dateHeader).getTime();
-        } catch (e) { }
+          const timeRes = await fetch('https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=' + TRUSTED_CLIENT_TOKEN, { method: 'HEAD' });
+          const dateHeader = timeRes.headers.get('date');
+          if (dateHeader) serverTime = new Date(dateHeader).getTime();
+        } catch {
+          // Bing time sync is optional; local clock is sufficient as a fallback.
+        }
 
         // 2. Token Generation
         const WIN_EPOCH = 11644473600n;

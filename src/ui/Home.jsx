@@ -17,31 +17,40 @@ export function Home() {
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const [books, setBooks] = useState([]);
+    const [libraryError, setLibraryError] = useState('');
     const [showPasteModal, setShowPasteModal] = useState(false);
     const [pastedText, setPastedText] = useState("");
     const [pastedTitle, setPastedTitle] = useState("");
     const [ttsRate, setTtsRate] = useState(1.0);
 
-    const refreshBooks = async () => {
-        const list = await bookStore.getBooks();
-        setBooks(list);
-        setInitialLoading(false);
-    };
-
-    useEffect(() => {
-        const loadBooks = async () => {
+    const refreshBooks = useCallback(async () => {
+        try {
+            setLibraryError('');
             const list = await bookStore.getBooks();
             setBooks(list);
+        } catch (error) {
+            console.error('Failed to load library', error);
+            setLibraryError('Your library could not be loaded.');
+            showToast('Could not load your library.', 'error');
+        }
+    }, [showToast]);
+
+    useEffect(() => {
+        const loadInitialBooks = async () => {
+            await refreshBooks();
             setInitialLoading(false);
         };
-        loadBooks();
-
+        loadInitialBooks();
         const loadSettings = async () => {
-            const settings = await bookStore.getSettings('ttsConfig');
-            if (settings?.rate) setTtsRate(settings.rate);
+            try {
+                const settings = await bookStore.getSettings('ttsConfig');
+                if (settings?.rate) setTtsRate(settings.rate);
+            } catch (error) {
+                console.warn('Could not load TTS settings', error);
+            }
         };
         loadSettings();
-    }, []);
+    }, [refreshBooks]);
 
     const getReadingTime = (words, rate = null) => {
         if (!words) return null;
@@ -91,7 +100,7 @@ export function Home() {
     };
 
     const handleFile = useCallback(async (file) => {
-        if (!file) return;
+        if (!file || loading) return;
 
         setLoading(true);
         try {
@@ -124,13 +133,17 @@ export function Home() {
             }
             setLoading(false);
         }
-    }, [navigate, showToast]);
-
+    }, [loading, navigate, showToast]);
     const handlePaste = async () => {
-        if (!pastedText.trim()) return;
+        if (!pastedText.trim() || loading) return;
         setLoading(true);
         try {
-            const fileName = (pastedTitle.trim() || "Pasted Text") + ".txt";
+            const title = (pastedTitle.trim() || 'Pasted Text')
+                .replace(/[\\/:*?"<>|]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 120) || 'Pasted Text';
+            const fileName = `${title}.txt`;
             const encoder = new TextEncoder();
             const buffer = encoder.encode(pastedText).buffer;
             const id = await bookStore.addBook(buffer, fileName);
@@ -151,9 +164,14 @@ export function Home() {
 
     const deleteBook = async (e, id) => {
         e.stopPropagation();
-        if (window.confirm("Delete this book?")) {
+        if (!window.confirm("Delete this book?")) return;
+        try {
             await bookStore.removeBook(id);
-            refreshBooks();
+            await refreshBooks();
+            showToast('Book deleted.', 'info');
+        } catch (error) {
+            console.error('Failed to delete book', error);
+            showToast('Could not delete this book.', 'error');
         }
     };
 
@@ -169,9 +187,9 @@ export function Home() {
     const onDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false); }, []);
 
     const onBrowse = (e) => {
-        if (e.target.files && e.target.files[0]) {
-            handleFile(e.target.files[0]);
-        }
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (file) handleFile(file);
     };
 
     return (
@@ -201,6 +219,26 @@ export function Home() {
                             <Skeleton width="100px" height="0.75rem" />
                         </div>
                     ))
+                ) : books.length === 0 ? (
+                    <div
+                        role="status"
+                        style={{
+                            gridColumn: '1 / -1',
+                            padding: '3rem 1rem',
+                            textAlign: 'center',
+                            color: 'var(--text-secondary)',
+                            border: '1px dashed var(--border-color)',
+                            borderRadius: '12px'
+                        }}
+                    >
+                        <Book size={40} style={{ opacity: 0.25, marginBottom: '0.75rem' }} />
+                        <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                            {libraryError || 'Your library is empty'}
+                        </h2>
+                        <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                            {libraryError ? 'Refresh the page and try again.' : 'Add an EPUB, PDF, Markdown, or text file below to start reading.'}
+                        </p>
+                    </div>
                 ) : (
                     books.map(book => (
                     <div
@@ -326,11 +364,18 @@ export function Home() {
                     onDrop={onDrop}
                     onDragOver={onDragOver}
                     onDragLeave={onDragLeave}
-                    onClick={() => document.getElementById('file-input').click()}
-                    tabIndex={0}
+                    onClick={() => { if (!loading) document.getElementById('file-input')?.click(); }}
+                    tabIndex={loading ? -1 : 0}
                     role="button"
                     aria-label="Upload a book file"
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('file-input').click(); }}
+                    aria-disabled={loading}
+                    aria-busy={loading}
+                    onKeyDown={(e) => {
+                        if (!loading && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            document.getElementById('file-input')?.click();
+                        }
+                    }}
                     style={{
                         flex: 1,
                         border: `2px dashed ${isDragging ? 'var(--accent-color)' : 'var(--border-color)'}`,
@@ -402,21 +447,31 @@ export function Home() {
                         padding: '1rem',
                         animation: 'toast-slide-in 0.2s ease-out'
                     }}>
-                    <div style={{
-                        background: 'var(--bg-primary)',
-                        width: '100%', maxWidth: '520px',
-                        padding: '2rem', borderRadius: '16px',
-                        display: 'flex', flexDirection: 'column', gap: '1rem',
-                        boxShadow: '0 16px 48px var(--shadow-lg)'
-                    }}>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Paste Text Content</h3>
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="paste-dialog-title"
+                        style={{
+                            background: 'var(--bg-primary)',
+                            width: '100%', maxWidth: '520px',
+                            padding: '2rem', borderRadius: '16px',
+                            display: 'flex', flexDirection: 'column', gap: '1rem',
+                            boxShadow: '0 16px 48px var(--shadow-lg)'
+                        }}
+                    >
+                        <h3 id="paste-dialog-title" style={{ margin: 0, fontSize: '1.1rem' }}>Paste Text Content</h3>
+                        <label htmlFor="paste-title" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Title (optional)</label>
                         <input
+                            id="paste-title"
                             type="text"
                             placeholder="Title (optional)"
                             value={pastedTitle}
                             onChange={(e) => setPastedTitle(e.target.value)}
+                            style={{ width: '100%' }}
                         />
+                        <label htmlFor="paste-content" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Text to read</label>
                         <textarea
+                            id="paste-content"
                             placeholder="Paste your text here..."
                             value={pastedText}
                             onChange={(e) => setPastedText(e.target.value)}

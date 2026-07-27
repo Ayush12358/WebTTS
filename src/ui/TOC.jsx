@@ -21,6 +21,7 @@ export function TOC() {
     const [chapters, setChapters] = useState([]);
     const [bookmarks, setBookmarks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const [ttsRate, setTtsRate] = useState(1.0);
 
     useEffect(() => {
@@ -35,9 +36,9 @@ export function TOC() {
 
                 // Use the TOC stored in metadata if available
                 // But check if it has reading time (words)
-                const hasWords = metadata.toc && metadata.toc.length > 0 && metadata.toc[0].words > 0;
+                const hasWords = metadata.toc?.some(chapter => chapter?.words > 0);
 
-                if (metadata.toc && hasWords) {
+                if (metadata.tocVersion === 2 && metadata.toc && hasWords) {
                     setChapters(metadata.toc);
                     setLoading(false);
                     return;
@@ -48,14 +49,25 @@ export function TOC() {
                 const parser = getParserForFile(metadata.fileName);
                 if (parser) {
                     const parsed = await parser.parse(data, metadata.fileName);
+                    const refreshedMetadata = {
+                        ...metadata,
+                        toc: parsed.toc,
+                        tocVersion: 2,
+                        totalWords: parsed.toc.reduce((acc, chapter) => acc + (chapter.hidden ? 0 : chapter.words || 0), 0)
+                    };
+                    setMeta(refreshedMetadata);
                     setChapters(parsed.toc);
-                    // Update metadata with the new TOC (including words) for next time
-                    await bookStore.updateBookMeta(id, { toc: parsed.toc });
+                    await bookStore.updateBookMeta(id, {
+                        toc: parsed.toc,
+                        tocVersion: 2,
+                        totalWords: refreshedMetadata.totalWords
+                    });
                 }
 
                 setLoading(false);
             } catch (err) {
                 console.error("TOC Load Error:", err);
+                setLoadError('Could not load this book.');
                 setLoading(false);
             }
         };
@@ -96,12 +108,12 @@ export function TOC() {
 
         // Current chapter partial (estimation)
         const currentChapter = metadata.toc[spineIndex];
-        if (currentChapter) {
+        if (currentChapter && !currentChapter.hidden) {
             remainingWords += (currentChapter.words || 0) * 0.5;
         }
 
         for (let i = spineIndex + 1; i < metadata.toc.length; i++) {
-            remainingWords += (metadata.toc[i].words || 0);
+            if (!metadata.toc[i]?.hidden) remainingWords += (metadata.toc[i]?.words || 0);
         }
 
         const wpm = 200 * ttsRate;
@@ -117,7 +129,7 @@ export function TOC() {
         return `${totalMins}m left`;
     };
 
-    const totalWords = chapters.reduce((acc, curr) => acc + (curr.words || 0), 0);
+    const totalWords = chapters.reduce((acc, curr) => acc + (curr.hidden ? 0 : curr.words || 0), 0);
     const totalTime = getReadingTime(totalWords);
     const timeLeft = meta ? getRemainingTime(meta) : null;
 
@@ -153,8 +165,17 @@ export function TOC() {
             </div>
         </div>
     );
+    if (loadError) return (
+        <div role="alert" style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
+            <p>{loadError}</p>
+            <button onClick={() => navigate(0)}>Retry</button>
+        </div>
+    );
     if (!meta) return <div style={{ padding: '2rem', textAlign: 'center' }}>Book not found.</div>;
 
+    const visibleChapters = chapters
+        .map((chapter, spineIndex) => ({ chapter, spineIndex }))
+        .filter(({ chapter }) => !chapter.hidden);
     return (
         <div className="toc-container" style={{ padding: '1rem', maxWidth: '800px', margin: '0 auto' }}>
 
@@ -192,7 +213,7 @@ export function TOC() {
 
             <div className="chapter-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <h3 style={{ marginBottom: '1rem' }}>Contents</h3>
-                {chapters.length === 0 ? (
+                {visibleChapters.length === 0 ? (
                     <div style={{
                         padding: '2rem 1rem',
                         textAlign: 'center',
@@ -204,14 +225,14 @@ export function TOC() {
                         No table of contents found.
                     </div>
                 ) : (
-                    chapters.map((chapter, index) => (
+                    visibleChapters.map(({ chapter, spineIndex }, index) => (
                         <div
-                            key={index}
-                            onClick={() => navigate(`/book/${id}/read/${index}`)}
+                            key={spineIndex}
+                            onClick={() => navigate(`/book/${id}/read/${spineIndex}`)}
                             tabIndex={0}
                             role="button"
                             aria-label={`Chapter ${index + 1}: ${chapter.title || ''}`}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/book/${id}/read/${index}`); } }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/book/${id}/read/${spineIndex}`); } }}
                             className="interactive-card chapter-item"
                             style={{
                                 padding: '0.9rem 1rem',
@@ -237,7 +258,7 @@ export function TOC() {
                                     </div>
                                 )}
                             </div>
-                            {bookmarks.some(b => parseInt(b.spineIndex) === index) && (
+                            {bookmarks.some(b => parseInt(b.spineIndex) === spineIndex) && (
                                 <Bookmark size={14} style={{ color: 'var(--accent-color)', opacity: 0.8 }} />
                             )}
                         </div>

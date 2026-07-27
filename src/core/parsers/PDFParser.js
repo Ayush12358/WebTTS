@@ -1,8 +1,33 @@
 import { BookParser } from './BookParser';
-import * as pdfjsLib from 'pdfjs-dist';
+import { pdfjsLib } from '../pdfjs';
+import { splitTextIntoSegments } from '../content';
 
-// Using unpkg for the worker since cdnjs 5.4.624 threw a 404
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+function countWords(text) {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+}
+
+function extractPageText(items) {
+    const lines = [];
+    for (const item of items || []) {
+        const text = item.str?.trim();
+        if (!text) continue;
+
+        const y = item.transform?.[5] ?? 0;
+        const currentLine = lines[lines.length - 1];
+        if (!currentLine || item.hasEOL || Math.abs(y - currentLine.y) > 5) {
+            lines.push({ y, items: [{ x: item.transform?.[4] ?? 0, text }] });
+        } else {
+            currentLine.items.push({ x: item.transform?.[4] ?? 0, text });
+        }
+    }
+
+    return lines
+        .map(line => line.items.sort((a, b) => a.x - b.x).map(item => item.text).join(' '))
+        .join('\n')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
 
 /**
  * PDF Parser
@@ -40,51 +65,33 @@ export class PDFParser extends BookParser {
         const pagesText = [];
         const toc = [];
 
-        // We'll extract text from each page.
-        // For very large PDFs, this could be slow, but for TTS we generally need the full text.
         for (let i = 1; i <= numPages; i++) {
             try {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-
-                // Heuristic: concatenate text items. pdfjs returns individual text chunks.
-                // We add a space between chunks if they are on the same line, or a newline if Y coordinate changes significantly.
-                let pageText = '';
-                let lastY = -1;
-
-                for (const item of textContent.items) {
-                    if (lastY !== -1 && Math.abs(item.transform[5] - lastY) > 5) {
-                        pageText += '\n'; // New line roughly
-                    } else if (lastY !== -1) {
-                        pageText += ' ';
-                    }
-                    pageText += item.str;
-                    lastY = item.transform[5];
-                }
-
-                // Clean up excessive whitespace
-                pageText = pageText.replace(/\s+/g, ' ').trim();
+                const pageText = extractPageText(textContent.items);
 
                 pagesText.push(pageText);
-
-                const wordCount = pageText.split(/\s+/).filter(w => w.length > 0).length;
-
                 toc.push({
+                    id: `page-${i}`,
                     title: `Page ${i}`,
                     href: `page-${i}`,
-                    start: i - 1, // Store index to pagesText array
+                    start: i - 1,
                     end: i - 1,
-                    words: wordCount
+                    words: countWords(pageText),
+                    locator: { type: 'pdf-page', value: i - 1 }
                 });
             } catch (err) {
                 console.warn(`Could not extract text from page ${i}:`, err);
-                pagesText.push(''); // Push empty string so indices line up
+                pagesText.push('');
                 toc.push({
+                    id: `page-${i}`,
                     title: `Page ${i} (Unreadable)`,
                     href: `page-${i}`,
                     start: i - 1,
                     end: i - 1,
-                    words: 0
+                    words: 0,
+                    locator: { type: 'pdf-page', value: i - 1 }
                 });
             }
         }
@@ -92,43 +99,35 @@ export class PDFParser extends BookParser {
         return {
             title,
             author: 'PDF Document',
-            cover: null, // Could potentially render first page to canvas, but keeping it simple for now
+            cover: null,
             toc,
             spineLength: toc.length,
-            instance: { pagesText, toc }
+            instance: { data: pdfData, pagesText, toc }
         };
     }
 
     async getChapterContent(bookInstance, chapterRef) {
-        const { pagesText, toc } = bookInstance;
+        const { data, pagesText, toc } = bookInstance;
         let pageIndex = 0;
 
         if (typeof chapterRef === 'number') {
             pageIndex = chapterRef;
         } else if (typeof chapterRef === 'string') {
             const match = chapterRef.match(/page-(\d+)/);
-            if (match) pageIndex = parseInt(match[1]) - 1;
+            if (match) pageIndex = parseInt(match[1], 10) - 1;
         }
 
         const entry = toc[pageIndex];
-        const content = pagesText[pageIndex] || '';
+        if (!entry) throw new Error(`Page not found: ${chapterRef}`);
 
-        // Wrap in paragraphs roughly based on standard sentencizer or newlines if any remained
-        // We stripped newlines earlier, so we just wrap the whole block in a <p> or split by period.
-        // Actually, WebTTS handles plain <p> tags well.
-
-        let html;
-        if (content.length > 0) {
-            // Basic splitting at punctuation followed by space to create readable paragraphs
-            const paragraphs = content.split(/(?<=[.!?])\s+/);
-            html = paragraphs.map(p => `<p>${p}</p>`).join('');
-        } else {
-            html = '<p><i>[Blank Page or Unreadable Content]</i></p>';
-        }
-
+        const text = pagesText[pageIndex] || '';
         return {
-            html,
-            title: entry.title
+            kind: 'pdf-page',
+            title: entry.title,
+            pdfData: data,
+            pageIndex: pageIndex + 1,
+            segments: splitTextIntoSegments(text),
+            empty: !text
         };
     }
 

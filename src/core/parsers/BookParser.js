@@ -33,7 +33,7 @@ export class BookParser {
      *   instance: any  // Parser-specific book instance for rendering
      * }>}
      */
-    async parse(data, fileName) {
+    async parse() {
         throw new Error("Method 'parse' must be implemented by subclass");
     }
 
@@ -46,7 +46,7 @@ export class BookParser {
      *   title: string
      * }>}
      */
-    async getChapterContent(bookInstance, chapterRef) {
+    async getChapterContent() {
         throw new Error("Method 'getChapterContent' must be implemented by subclass");
     }
 
@@ -56,7 +56,7 @@ export class BookParser {
      * @param {number} currentIndex 
      * @returns {number|null} Next chapter index or null if at end
      */
-    getNextChapter(bookInstance, currentIndex) {
+    getNextChapter() {
         throw new Error("Method 'getNextChapter' must be implemented by subclass");
     }
 
@@ -66,7 +66,7 @@ export class BookParser {
      * @param {number} currentIndex 
      * @returns {number|null} Previous chapter index or null if at start
      */
-    getPrevChapter(bookInstance, currentIndex) {
+    getPrevChapter() {
         throw new Error("Method 'getPrevChapter' must be implemented by subclass");
     }
 }

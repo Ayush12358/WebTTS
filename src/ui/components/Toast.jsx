@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { X, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
@@ -83,6 +84,8 @@ function ToastItem({ toast, onDismiss }) {
     return (
         <div
             className="toast-item"
+            role={toast.type === 'error' ? 'alert' : 'status'}
+            aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
             style={{
                 display: 'flex',
                 alignItems: 'flex-start',
@@ -104,6 +107,7 @@ function ToastItem({ toast, onDismiss }) {
             <span style={{ flex: 1 }}>{toast.message}</span>
             <button
                 onClick={() => onDismiss(toast.id)}
+                aria-label="Dismiss notification"
                 style={{
                     background: 'transparent',
                     border: 'none',

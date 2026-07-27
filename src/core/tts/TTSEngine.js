@@ -20,7 +20,7 @@ export class TTSEngine {
      * @param {object} options { voiceId, rate, pitch, volume }
      * @param {object} callbacks { onBoundary, onEnd, onError, onStart }
      */
-    speak(text, options = {}, callbacks = {}) {
+    speak() {
         throw new Error("Method 'speak' must be implemented.");
     }
 
@@ -30,7 +30,7 @@ export class TTSEngine {
      * @param {object} options 
      * @returns {Promise<HTMLAudioElement|null>}
      */
-    async prefetch(text, options = {}) {
+    async prefetch() {
         return null;
     }
 

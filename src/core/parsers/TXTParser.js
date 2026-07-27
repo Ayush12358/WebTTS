@@ -1,4 +1,9 @@
 import { BookParser } from './BookParser';
+import { sanitizeHtml, textToHtml } from '../content';
+
+function countWords(text) {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+}
 
 /**
  * Plain Text Parser
@@ -19,24 +24,49 @@ export class TXTParser extends BookParser {
         } else {
             text = data.toString();
         }
+        text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
         const title = fileName.replace(/\.txt$/i, '');
-
-        // Split into chunks of ~5000 characters for long files
-        const chunkSize = 5000;
         const toc = [];
-        for (let i = 0; i < text.length; i += chunkSize) {
-            const pageNum = Math.floor(i / chunkSize) + 1;
-            const content = text.substring(i, i + chunkSize);
-            const wordCount = content.trim().split(/\s+/).length;
+        const chunkSize = 5000;
 
+        if (!text) {
             toc.push({
-                title: `Part ${pageNum}`,
-                href: `part-${pageNum}`,
-                start: i,
-                end: i + chunkSize,
-                words: wordCount
+                id: 'part-1',
+                title: 'Full Text',
+                href: 'part-1',
+                start: 0,
+                end: 0,
+                locator: { type: 'text-range', value: 0 },
+                words: 0
             });
+        } else {
+            let start = 0;
+            while (start < text.length) {
+                let end = Math.min(start + chunkSize, text.length);
+                if (end < text.length) {
+                    const paragraphEnd = text.lastIndexOf('\n\n', end);
+                    const wordEnd = text.lastIndexOf(' ', end);
+                    if (paragraphEnd > start + 500) {
+                        end = paragraphEnd + 2;
+                    } else if (wordEnd > start) {
+                        end = wordEnd;
+                    }
+                }
+
+                const content = text.slice(start, end);
+                const pageNum = toc.length + 1;
+                toc.push({
+                    id: `part-${pageNum}`,
+                    title: `Part ${pageNum}`,
+                    href: `part-${pageNum}`,
+                    start,
+                    end,
+                    locator: { type: 'text-range', value: start },
+                    words: countWords(content)
+                });
+                start = end;
+            }
         }
 
         return {
@@ -57,17 +87,16 @@ export class TXTParser extends BookParser {
             partIndex = chapterRef;
         } else if (typeof chapterRef === 'string') {
             const match = chapterRef.match(/part-(\d+)/);
-            if (match) partIndex = parseInt(match[1]) - 1;
+            if (match) partIndex = parseInt(match[1], 10) - 1;
         }
 
         const entry = toc[partIndex];
+        if (!entry) throw new Error(`Part not found: ${chapterRef}`);
         const content = text.substring(entry.start, entry.end);
 
-        // Wrap in paragraphs for the reader
-        const html = content.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
-
         return {
-            html,
+            kind: 'html',
+            html: sanitizeHtml(textToHtml(content)),
             title: entry.title
         };
     }

@@ -1,6 +1,6 @@
 import { Play, Pause, SkipBack, SkipForward, Clock } from 'lucide-react';
 
-export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
+export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft, canPrev = true, canNext = true }) {
     return (
         <div className="reader-controls" style={{
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5rem',
@@ -9,6 +9,7 @@ export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
         }}>
             <button
                 onClick={onPrev}
+                disabled={!canPrev}
                 className="icon-btn"
                 aria-label="Previous sentence"
                 style={{ color: 'var(--text-secondary)' }}
@@ -33,6 +34,7 @@ export function Controls({ playing, onPlayPause, onNext, onPrev, timeLeft }) {
 
             <button
                 onClick={onNext}
+                disabled={!canNext}
                 className="icon-btn"
                 aria-label="Next sentence"
                 style={{ color: 'var(--text-secondary)' }}

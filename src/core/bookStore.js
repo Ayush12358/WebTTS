@@ -23,6 +23,22 @@ const settingsStore = localforage.createInstance({
     name: "WebTTS",
     storeName: "settings" // Stores app-wide settings (TTS config, etc.)
 });
+const ocrStore = localforage.createInstance({
+    name: "WebTTS",
+    storeName: "ocr" // Stores lazy OCR results by book/page
+});
+
+const getOcrKey = (bookId, pageIndex) => `${bookId}:${pageIndex}`;
+
+const removeBookOcr = async (bookId) => {
+    const prefix = `${bookId}:`;
+    const keys = [];
+    await ocrStore.iterate((value, key) => {
+        if (String(key).startsWith(prefix)) keys.push(key);
+    });
+    await Promise.all(keys.map(key => ocrStore.removeItem(key)));
+};
+
 
 export const bookStore = {
     /**
@@ -72,8 +88,8 @@ export const bookStore = {
                 author: parsed.author,
                 fileName: importFileName,
                 parserName: parser.name,
-                toc: parsed.toc,
-                totalWords: parsed.toc?.reduce((acc, curr) => acc + (curr.words || 0), 0) || 0,
+                tocVersion: 2,
+                totalWords: parsed.toc?.reduce((acc, curr) => acc + (curr.hidden ? 0 : curr.words || 0), 0) || 0,
                 spineLength: parsed.spineLength,
                 cover: coverData,
                 addedAt: Date.now()
@@ -129,7 +145,7 @@ export const bookStore = {
             const updated = { ...meta, ...updates };
             // Auto-calculate totalWords if TOC was updated
             if (updates.toc) {
-                updated.totalWords = updates.toc.reduce((acc, curr) => acc + (curr.words || 0), 0);
+                updated.totalWords = updates.toc.reduce((acc, curr) => acc + (curr.hidden ? 0 : curr.words || 0), 0);
             }
             await metaStore.setItem(id, updated);
         }
@@ -141,6 +157,8 @@ export const bookStore = {
     removeBook: async (id) => {
         await booksStore.removeItem(id);
         await metaStore.removeItem(id);
+        await bookmarksStore.removeItem(id);
+        await removeBookOcr(id);
     },
 
     /**
@@ -152,14 +170,37 @@ export const bookStore = {
     },
 
     /**
-     * Add a bookmark to a specific line
+     * Get a cached OCR result for one PDF page.
      */
-    addBookmark: async (bookId, spineIndex, nodeIndex, text) => {
+    getPdfOcr: async (bookId, pageIndex) => {
+        return await ocrStore.getItem(getOcrKey(bookId, pageIndex));
+    },
+
+    /**
+     * Save a lazy OCR result for one PDF page.
+     */
+    savePdfOcr: async (bookId, pageIndex, result) => {
+        await ocrStore.setItem(getOcrKey(bookId, pageIndex), {
+            version: 1,
+            pageIndex,
+            text: result.text,
+            words: result.words,
+            confidence: result.confidence ?? null,
+            savedAt: Date.now()
+        });
+    },
+
+    /**
+     * Add a bookmark to a stable chapter/segment locator.
+     */
+    addBookmark: async (bookId, spineIndex, nodeIndex, text, chapterId = null) => {
         const bookmarks = await bookmarksStore.getItem(bookId) || [];
         const newBookmark = {
             id: Date.now().toString(),
             spineIndex,
             nodeIndex,
+            chapterId,
+            segmentId: String(nodeIndex),
             text: text.length > 100 ? text.substring(0, 100) + "..." : text,
             timestamp: Date.now()
         };
@@ -199,12 +240,15 @@ export const bookStore = {
     },
 
     /**
-     * Save reading progress
+     * Save reading progress.
      */
-    saveProgress: async (bookId, spineIndex, nodeIndex) => {
+    saveProgress: async (bookId, spineIndex, nodeIndex, chapterId = null) => {
         const meta = await metaStore.getItem(bookId);
         if (meta) {
-            await metaStore.setItem(bookId, { ...meta, lastProgress: { spineIndex, nodeIndex } });
+            await metaStore.setItem(bookId, {
+                ...meta,
+                lastProgress: { spineIndex, nodeIndex, chapterId, segmentId: String(nodeIndex) }
+            });
         }
     },
 
@@ -230,5 +274,6 @@ export const bookStore = {
         await booksStore.clear();
         await metaStore.clear();
         await bookmarksStore.clear();
+        await ocrStore.clear();
     }
 };

@@ -98,7 +98,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 
 1. **Edge TTS token** — Hardcoded `TRUSTED_CLIENT_TOKEN` in `vite.config.js` and `api/edge-tts.js`. May break if Bing rotates it.
 2. **IndexedDB quota** — ~50MB per origin. Large EPUBs with images can exceed it. Quota check warns on import but doesn't block; Settings shows usage bar.
-3. **PDF is text-only** — No OCR, no images, no sentence-level splitting. Coarse page-level TTS only.
+3. **PDF OCR** — Native text extraction is preferred; image-only pages use lazy local English Tesseract.js OCR. Complex layouts and non-English scans remain best-effort.
 4. **Web Speech API varies** — Sentence boundary events unreliable on Firefox/Safari.
 5. **Parsing blocks UI** — All parsing on main thread (no Web Workers). Large books cause ~2-5s lag on import.
 6. **Google Cloud API key** — Stored in `localStorage`, exposed in client fetch requests. Fine for testing; use a backend proxy for production.

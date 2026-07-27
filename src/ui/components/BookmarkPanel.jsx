@@ -27,6 +27,9 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
     return (
         <div
             className="bookmark-panel slide-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bookmark-panel-title"
             style={{
                 position: 'absolute',
                 top: 0, right: 0, bottom: 0,
@@ -50,7 +53,7 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Bookmark size={18} />
-                    <h3 style={{ margin: 0, fontSize: '1rem' }}>Bookmarks</h3>
+                    <h3 id="bookmark-panel-title" style={{ margin: 0, fontSize: '1rem' }}>Bookmarks</h3>
                 </div>
                 <button onClick={onClose} className="icon-btn" aria-label="Close bookmarks">
                     <X size={18} />
@@ -70,6 +73,7 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
                         <Search size={14} style={{ opacity: 0.4 }} />
                         <input
                             type="text"
+                            aria-label="Search bookmarks"
                             placeholder="Search bookmarks..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
@@ -122,6 +126,8 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
                         return (
                             <div
                                 className="bookmark-panel-item"
+                                role="button"
+                                tabIndex={0}
                                 key={b.id}
                                 style={{
                                     padding: '0.6rem 0.75rem',
@@ -135,6 +141,12 @@ export function BookmarkPanel({ bookmarks, currentSpineIndex, onNavigate, onDele
                                     transition: 'background 0.15s'
                                 }}
                                 onClick={() => onNavigate(b.spineIndex, b.nodeIndex)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onNavigate(b.spineIndex, b.nodeIndex);
+                                    }
+                                }}
                             >
                                 <p style={{
                                     margin: '0 0 0.25rem 0',

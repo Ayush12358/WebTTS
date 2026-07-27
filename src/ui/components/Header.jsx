@@ -27,21 +27,28 @@ export function Header() {
     const [pageTitle, setPageTitle] = useState('');
 
     useEffect(() => {
+        let active = true;
+        const setTitle = title => {
+            if (active) setPageTitle(title);
+        };
         const resolveTitle = async () => {
-            if (isHome) { setPageTitle(''); return; }
+            if (isHome) { setTitle(''); return; }
             const path = location.pathname;
-            if (path === '/test-tts') { setPageTitle('TTS Tester'); return; }
+            if (path === '/test-tts') { setTitle('TTS Tester'); return; }
             if (bookId) {
                 try {
                     const meta = await bookStore.getBookMeta(bookId);
-                    if (meta?.title) { setPageTitle(meta.title); return; }
-                } catch { /* fallback */ }
+                    if (meta?.title) { setTitle(meta.title); return; }
+                } catch {
+                    // Fall back to the route label below.
+                }
             }
-            if (path.includes('/toc')) setPageTitle('Chapters');
-            else if (path.includes('/read')) setPageTitle('Reading');
-            else setPageTitle('WebTTS');
+            if (path.includes('/toc')) setTitle('Chapters');
+            else if (path.includes('/read')) setTitle('Reading');
+            else setTitle('WebTTS');
         };
         resolveTitle();
+        return () => { active = false; };
     }, [location.pathname, bookId, isHome]);
 
     const handleBack = () => {
@@ -91,7 +98,7 @@ export function Header() {
 
             {/* Right */}
             <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
-                {(bookId || isHome) && (
+                {bookId && (
                     <button
                         onClick={handleBookmarkClick}
                         className="icon-btn"

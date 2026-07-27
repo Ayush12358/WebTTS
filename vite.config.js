@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 import escape from 'xml-escape';
 import crypto from 'node:crypto';
 
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 /**
  * Robust Edge TTS Synthesis Logic (Definitive Jan 2026 Bypass)
  * This logic matches the latest working Python/Go implementations.
@@ -23,7 +26,9 @@ async function synthesize(text, voice, rate, pitch, onChunk) {
     const timeRes = await fetch('https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=' + TRUSTED_CLIENT_TOKEN, { method: 'HEAD' });
     const dateHeader = timeRes.headers.get('date');
     if (dateHeader) serverTime = new Date(dateHeader).getTime();
-  } catch (e) { }
+  } catch {
+    // Bing time sync is optional; local clock is sufficient as a fallback.
+  }
 
   // 2. Sec-MS-GEC Token Generation
   const WIN_EPOCH = 11644473600n;
@@ -135,11 +140,52 @@ const edgeTtsApiPlugin = () => ({
   }
 });
 
+const localOcrAssetsPlugin = () => {
+  const assets = new Map([
+    ['ocr/worker.min.js', new URL('./node_modules/tesseract.js/dist/worker.min.js', import.meta.url)],
+    ['ocr/tesseract-core-lstm.wasm.js', new URL('./node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js', import.meta.url)],
+    ['ocr/tesseract-core-lstm.wasm', new URL('./node_modules/tesseract.js-core/tesseract-core-lstm.wasm', import.meta.url)],
+    ['ocr/eng.traineddata.gz', new URL('./node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz', import.meta.url)]
+  ]);
+
+  const getAssetKey = (url) => {
+    const pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
+    const marker = pathname.indexOf('/ocr/');
+    return marker >= 0 ? pathname.slice(marker + 1) : pathname.replace(/^\/+/, '');
+  };
+
+  return {
+    name: 'local-ocr-assets',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const source = assets.get(getAssetKey(req.url || ''));
+        if (!source) {
+          next();
+          return;
+        }
+
+        const key = getAssetKey(req.url || '');
+        res.setHeader('Content-Type', key.endsWith('.wasm') ? 'application/wasm' : 'application/javascript');
+        res.end(fs.readFileSync(fileURLToPath(source)));
+      });
+    },
+    generateBundle() {
+      assets.forEach((source, fileName) => {
+        this.emitFile({ type: 'asset', fileName, source: fs.readFileSync(fileURLToPath(source)) });
+      });
+    }
+  };
+};
+
 export default defineConfig({
   plugins: [
     react(),
+    localOcrAssetsPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024
+      },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'WebTTS - EPUB to Audiobook',
