@@ -4,7 +4,7 @@ import { Play, Square, RefreshCcw } from 'lucide-react';
 
 export function TTSTester() {
     const [text, setText] = useState("This is a simple test of the text-to-speech system.");
-    const [selectedEngine, setSelectedEngine] = useState('webSpeech');
+    const [selectedEngine, setSelectedEngine] = useState('kokoro');
     const [selectedVoice, setSelectedVoice] = useState('');
     const [voices, setVoices] = useState([]);
     const [status, setStatus] = useState('Idle');

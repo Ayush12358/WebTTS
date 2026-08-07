@@ -243,6 +243,7 @@ export function Settings({ config, onConfigChange }) {
                 <p style={{ margin: '0 0 0.5rem 0' }}>
                     {config.engineId === 'webSpeech' && 'Uses your device\'s built-in voices.'}
                     {config.engineId === 'edgeTTS' && 'High-quality neural voices from Microsoft Edge.'}
+                    {config.engineId === 'kokoro' && 'Natural on-device neural voice. ~80 MB model downloaded once, then works offline.'}
                 </p>
                 <a
                     href="/test-tts"

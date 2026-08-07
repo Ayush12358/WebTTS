@@ -177,10 +177,26 @@ const localOcrAssetsPlugin = () => {
   };
 };
 
+/**
+ * onnxruntime-web's wasm is referenced via `new URL(..., import.meta.url)` so Vite
+ * bundles it as a 21.6MB asset — but KokoroEngine pins wasmPaths to the jsdelivr
+ * CDN, so the local copy is never fetched. Drop it from the build output (also
+ * keeps the PWA precache under the workbox size limit).
+ */
+const dropOrtWasmPlugin = () => ({
+    name: 'drop-ort-wasm',
+    generateBundle(_, bundle) {
+        for (const fileName of Object.keys(bundle)) {
+            if (fileName.includes('ort-wasm-simd-threaded.jsep')) delete bundle[fileName];
+        }
+    }
+});
+
 export default defineConfig({
   plugins: [
     react(),
     localOcrAssetsPlugin(),
+    dropOrtWasmPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {

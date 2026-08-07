@@ -7,7 +7,7 @@ import { bookStore } from './bookStore';
  */
 export function useTTSConfig() {
     const [config, setConfig] = useState({
-        engineId: 'webSpeech',
+        engineId: 'kokoro',
         voiceId: '',
         rate: 1.0,
         pitch: 1.0
