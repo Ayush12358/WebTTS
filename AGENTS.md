@@ -91,6 +91,8 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 
 **Auto-scroll follow** — `playFromIndex()` scrolls the active sentence into view within the `.reader-content` container (not `window`). Uses `lastScrolledIndex` ref to avoid redundant scrolls per sentence. Chapter changes reset scroll to top.
 
+**Chapter auto-continue** — when the last sentence of a chapter finishes the player auto-loads and starts the next chapter (tracked via `autoContinueRef`, cleared on manual navigation/stop/config change); stops at book end.
+
 **Bookmark integration** — `BookmarkPanel` slides out from right with: search filter, text expand/collapse (>120 chars), chapter-aware styling (highlighted if current chapter), delete button, empty state guidance.
 
 **Loading skeletons** — all loading states use `<Skeleton />` with shimmer animation. Home shows 4 book card placeholders, TOC shows 6 chapter rows, Player shows 14 paragraph-lines.

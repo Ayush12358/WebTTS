@@ -75,6 +75,10 @@ export function Player() {
     const playingRef = useRef(false);
     useEffect(() => { playingRef.current = playing; }, [playing]);
 
+    // Chapter auto-continue: set when the last sentence of a chapter ends and a
+    // next chapter exists; consumed by the post-render effect once its nodes load.
+    const autoContinueRef = useRef(false);
+
     // Prefetch Ref
     const prefetchRef = useRef({ index: -1, promise: null });
 
@@ -249,6 +253,13 @@ export function Player() {
         currentNodes.current = items;
         setCurrentNodeCount(items.length);
 
+        // Chapter auto-continue: consume-then-play, exactly once per chapter transition
+        // (flag set by playFromIndex at chapter end; nodes for the new chapter are now ready).
+        if (autoContinueRef.current && items.length > 0) {
+            autoContinueRef.current = false;
+            playNextRef.current(0);
+        }
+
         const chapterBookmarks = bookmarks.filter(b => parseInt(b.spineIndex, 10) === currentSpineIndex);
         chapterBookmarks.forEach(bookmark => {
             const index = parseInt(bookmark.nodeIndex, 10);
@@ -310,7 +321,7 @@ export function Player() {
     const timeLeft = calculateTimeLeft();
 
     // Navigation
-    const goToNextChapter = () => {
+    const goToNextChapter = useCallback(() => {
         if (!book || !parser) return;
         const next = parser.getNextChapter(book, currentSpineIndex);
         if (next !== null) {
@@ -318,10 +329,11 @@ export function Player() {
             loadChapter(parser, book, next);
             contentRef.current?.parentElement?.scrollTo(0, 0);
         }
-    };
+    }, [book, parser, currentSpineIndex, loadChapter]);
 
     const goToPrevChapter = () => {
         if (!book || !parser) return;
+        autoContinueRef.current = false; // manual navigation cancels pending auto-continue
         const prev = parser.getPrevChapter(book, currentSpineIndex);
         if (prev !== null) {
             setCurrentSpineIndex(prev);
@@ -341,9 +353,16 @@ export function Player() {
 
         if (index < 0) return;
         if (index >= currentNodes.current.length) {
-            setPlaying(false);
+            // Chapter end: auto-continue to the next chapter, else stop at book end.
+            if (parser && book && parser.getNextChapter(book, currentSpineIndex) !== null) {
+                autoContinueRef.current = true;
+                goToNextChapter();
+            } else {
+                setPlaying(false);
+            }
             return;
         }
+        autoContinueRef.current = false; // user-initiated play of a real sentence cancels any pending auto-continue
 
         await new Promise(r => setTimeout(r, 50));
         if (requestId !== playbackRequestRef.current) return;
@@ -424,7 +443,7 @@ export function Player() {
             console.error(e);
             setPlaying(false);
         }
-    }, [ttsConfig]);
+    }, [ttsConfig, book, parser, currentSpineIndex, goToNextChapter]);
 
     const handleContentClick = useCallback((e) => {
         if (isLongPress.current) {
@@ -458,6 +477,7 @@ export function Player() {
         setPlaying(false);
         contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
         prefetchRef.current = { index: -1, promise: null };
+        autoContinueRef.current = false; // config change cancels pending auto-continue
 
         if (shouldResume && resumeIndex >= 0) {
             const resumeConfig = ttsConfig;
@@ -472,6 +492,7 @@ export function Player() {
         playbackRequestRef.current += 1;
         playingRef.current = false;
         resumeOnConfigChangeRef.current = false;
+        autoContinueRef.current = false;
         engines[previousTtsConfigRef.current?.engineId]?.stop();
         clearTimeout(longPressTimer.current);
         longPressTimer.current = null;
@@ -482,6 +503,7 @@ export function Player() {
     const stopTTS = useCallback(() => {
         playingRef.current = false;
         resumeOnConfigChangeRef.current = false;
+        autoContinueRef.current = false; // manual stop cancels pending auto-continue
         playbackRequestRef.current += 1;
         setPlaying(false);
         const engine = engines[ttsConfig.engineId];
