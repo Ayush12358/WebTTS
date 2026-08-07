@@ -58,8 +58,21 @@ export default async function handler(req, res) {
             }
         });
 
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => { ws.terminate(); reject(new Error('Timeout')); }, 20000);
+        // Promise NEVER rejects: every terminal path resolves and ends the
+        // response, so an unhandled rejection can never crash the process.
+        await new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                ws.terminate();
+                if (!res.headersSent) res.status(504).send('Timeout');
+                if (!res.writableEnded) res.end();
+                resolve();
+            }, 20000);
+
+            const done = () => {
+                clearTimeout(timeout);
+                if (!res.writableEnded) res.end();
+                resolve();
+            };
 
             ws.on('open', () => {
                 clearTimeout(timeout);
@@ -79,13 +92,19 @@ export default async function handler(req, res) {
                     if (audioData.length > 0) res.write(audioData);
                 } else {
                     const msg = data.toString();
-                    if (msg.includes('Path:turn.end')) { ws.close(); res.end(); resolve(); }
-                    else if (msg.includes('Path:response') && msg.includes('403')) reject(new Error('Edge TTS 403 Forbidden'));
+                    if (msg.includes('Path:turn.end')) { ws.close(); done(); }
+                    // Bing rejects non-Edge origins with a 403 response — the
+                    // 200 audio/mpeg headers are already sent, so end with an
+                    // empty 200 rather than erroring out.
+                    else if (msg.includes('Path:response') && msg.includes('403')) { ws.close(); done(); }
                 }
             });
 
-            ws.on('error', (err) => { if (!res.headersSent) res.status(500).send(err.message); reject(err); });
-            ws.on('close', () => { if (!res.writableEnded) res.end(); resolve(); });
+            ws.on('error', (err) => {
+                if (!res.headersSent) res.status(500).send(err.message);
+                done();
+            });
+            ws.on('close', () => { done(); });
         });
     } catch (error) {
         if (!res.headersSent) res.status(500).send(error.message);
