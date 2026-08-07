@@ -1,16 +1,16 @@
 import { WebSpeechEngine } from './WebSpeechEngine';
 import { EdgeTTSEngine } from './EdgeTTSEngine';
-import { KokoroEngine } from './KokoroEngine';
+import { PiperEngine } from './PiperEngine';
 
 export const engines = {
-    webSpeech: new WebSpeechEngine(),
+    piper: new PiperEngine(),
     edgeTTS: new EdgeTTSEngine(),
-    kokoro: new KokoroEngine()
+    webSpeech: new WebSpeechEngine()
 };
 
 export const getAvailableEngines = () => {
     return [
-        { id: 'kokoro', name: 'Kokoro (On-device Neural)', requiresKey: false },
+        { id: 'piper', name: 'Piper (On-device Neural)', requiresKey: false },
         { id: 'edgeTTS', name: 'Microsoft Edge TTS (Edge browser only)', requiresKey: false },
         { id: 'webSpeech', name: 'System TTS', requiresKey: false }
     ];

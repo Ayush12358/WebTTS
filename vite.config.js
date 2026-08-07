@@ -178,29 +178,66 @@ const localOcrAssetsPlugin = () => {
 };
 
 /**
- * onnxruntime-web's wasm is referenced via `new URL(..., import.meta.url)` so Vite
- * bundles it as a 21.6MB asset — but KokoroEngine pins wasmPaths to the jsdelivr
- * CDN, so the local copy is never fetched. Drop it from the build output (also
- * keeps the PWA precache under the workbox size limit).
+ * Serves piper-tts-web's runtime assets from node_modules in dev and emits them
+ * into dist (mirrors localOcrAssetsPlugin). Only the files the runtimes
+ * actually fetch at runtime are included — the onnx wasm (OnnxWebRuntime pins
+ * wasmPaths to '/onnx/') and the phonemize wasm+data (fetched from '/piper/').
+ * Worker files are skipped: the app uses the main-thread PiperWebEngine.
  */
-const dropOrtWasmPlugin = () => ({
-    name: 'drop-ort-wasm',
-    generateBundle(_, bundle) {
-        for (const fileName of Object.keys(bundle)) {
-            if (fileName.includes('ort-wasm-simd-threaded.jsep')) delete bundle[fileName];
+const piperAssetsPlugin = () => {
+    const assets = new Map([
+        ['piper/piper_phonemize.wasm', new URL('./node_modules/piper-tts-web/dist/piper/piper_phonemize.wasm', import.meta.url)],
+        ['piper/piper_phonemize.data', new URL('./node_modules/piper-tts-web/dist/piper/piper_phonemize.data', import.meta.url)],
+        ['onnx/ort-wasm-simd-threaded.jsep.wasm', new URL('./node_modules/piper-tts-web/dist/onnx/ort-wasm-simd-threaded.jsep.wasm', import.meta.url)],
+        ['onnx/ort-wasm-simd-threaded.wasm', new URL('./node_modules/piper-tts-web/dist/onnx/ort-wasm-simd-threaded.wasm', import.meta.url)]
+    ]);
+
+    const getAssetKey = (url) => {
+        const pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
+        const marker = pathname.indexOf('/piper/');
+        if (marker >= 0) return pathname.slice(marker + 1);
+        const onnxMarker = pathname.indexOf('/onnx/');
+        return onnxMarker >= 0 ? pathname.slice(onnxMarker + 1) : pathname.replace(/^\/+/, '');
+    };
+
+    return {
+        name: 'piper-assets',
+        configureServer(server) {
+            server.middlewares.use((req, res, next) => {
+                const key = getAssetKey(req.url || '');
+                const source = assets.get(key);
+                if (!source) {
+                    next();
+                    return;
+                }
+
+                res.setHeader('Content-Type', key.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream');
+                res.end(fs.readFileSync(fileURLToPath(source)));
+            });
+        },
+        generateBundle() {
+            assets.forEach((source, fileName) => {
+                this.emitFile({ type: 'asset', fileName, source: fs.readFileSync(fileURLToPath(source)) });
+            });
         }
-    }
-});
+    };
+};
 
 export default defineConfig({
   plugins: [
     react(),
     localOcrAssetsPlugin(),
-    dropOrtWasmPlugin(),
+    piperAssetsPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Piper runtime assets are far over the 5MB precache cap and are only
+        // fetched at runtime anyway: the ~44MB piper-tts-web chunk, the /onnx/
+        // ort wasm (21MB/11MB) and /piper/ phonemize data (18MB) served by
+        // piperAssetsPlugin. Voices also download from HF at runtime, so
+        // offline piper is out of scope — keep all of it out of the manifest.
+        globIgnores: ['**/piper-tts-web-*.js', '**/onnx/**', '**/piper/**']
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {

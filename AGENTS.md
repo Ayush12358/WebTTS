@@ -25,7 +25,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 |----------|-----------|---------------|------------------|
 | **Parsers** | `BookParser` | `src/core/parsers/index.js` | Extend `BookParser`, implement `canParse()` + `parse()`, add to the `parsers` array |
 | **TTS Engines** | `TTSEngine` | `src/core/tts/index.js` | Extend `TTSEngine`, implement `speak()`, add to the `engines` object |
-| **TTS engines in registry** | — | — | `webSpeech` (System TTS) · `edgeTTS` (Edge-only proxy) · `kokoro` (Kokoro-82M on-device neural, default) |
+| **TTS engines in registry** | — | — | `webSpeech` (System TTS) · `edgeTTS` (Edge-only proxy) · `piper` (Piper on-device neural WASM, default) |
 
 **Parser return shape** (from `parse()`): `{ title, author, cover: Blob|null, toc: [{ title, href, words, spineIndex? }], spineLength, instance }`
 
@@ -97,7 +97,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 
 ## Pitfalls
 
-1. **Edge TTS is Edge-browser-only now** — The `TRUSTED_CLIENT_TOKEN` trick (in `vite.config.js` and `api/edge-tts.js`) is rejected by Bing from non-Edge origins, so the `/api/edge-tts` proxy and dev proxy stay as an Edge-only fallback. **Default engine: Kokoro** (`KokoroEngine`, kokoro-js + transformers.js WASM, fully on-device). First use downloads an ~80MB q8 model from the Hugging Face Hub and caches it in the browser; it works offline afterwards. Model loads lazily on first `speak()`/`prefetch()` via dynamic import (code-split chunk).
+1. **Edge TTS is Edge-browser-only now** — The `TRUSTED_CLIENT_TOKEN` trick (in `vite.config.js` and `api/edge-tts.js`) is rejected by Bing from non-Edge origins, so the `/api/edge-tts` proxy and dev proxy stay as an Edge-only fallback. **Default engine: Piper** (`PiperEngine`, piper-tts-web WASM + onnxruntime-web, fully on-device). Each curated voice is a separate ~60MB onnx model fetched from Hugging Face (`rhasspy/piper-voices`) on first use — keep the curated voice list small. Rate is applied natively via the piper `length_scale` model parameter (1/rate). Runtime wasm (`/piper/`, `/onnx/`) is served/emitted by `piperAssetsPlugin`; the piper chunk and runtime assets are excluded from the PWA precache (over the 5MB cap, and offline voices are out of scope). Engine loads lazily on first `speak()`/`prefetch()` via dynamic import (code-split chunk).
 2. **IndexedDB quota** — ~50MB per origin. Large EPUBs with images can exceed it. Quota check warns on import but doesn't block; Settings shows usage bar.
 3. **PDF OCR** — Native text extraction is preferred; image-only pages use lazy local English Tesseract.js OCR. Complex layouts and non-English scans remain best-effort.
 4. **Web Speech API varies** — Sentence boundary events unreliable on Firefox/Safari.

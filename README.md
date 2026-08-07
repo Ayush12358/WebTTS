@@ -11,7 +11,7 @@ A minimalistic, high-fidelity PWA for converting ebooks into immersive audiobook
   - **PDF**: Native page rendering with local OCR fallback for image-only pages.
 - **Smart Reading Time**: Dynamic "min read" estimates that adjust automatically based on your current playback speed.
 - **Advanced TTS Engines**:
-  - **Kokoro (On-device Neural)**: Default engine. Natural neural voice running fully on-device via WebAssembly — free, private, and works offline after a one-time ~80 MB model download.
+  - **Piper (On-device Neural)**: Default engine. Natural neural voice running fully on-device via WebAssembly — free, private, no API key. Downloads a ~60 MB voice model once (per voice, from Hugging Face).
   - **System TTS**: Utilizes the native Web Speech API (Free, Offline).
   - **Microsoft Edge TTS**: High-quality neural voices (Edge browser only, streaming).
 - **Interactive Player**:
@@ -31,7 +31,7 @@ A minimalistic, high-fidelity PWA for converting ebooks into immersive audiobook
 - **Framework**: React 19 + Vite
 - **Storage**: IndexedDB (via `localforage`) for books, metadata, bookmarks, and settings.
 - **Parsing**: `epub.js` for ebooks, `pdfjs-dist` for PDFs, `marked` for Markdown.
-- **TTS**: Kokoro-82M on-device neural (kokoro-js + transformers.js WASM), Edge TTS WebSocket proxy (Edge-only fallback), and Web Speech API
+- **TTS**: Piper on-device neural (piper-tts-web + onnxruntime-web WASM), Edge TTS WebSocket proxy (Edge-only fallback), and Web Speech API
 - **Icons**: Lucide React
 - **PWA**: `vite-plugin-pwa`
 
