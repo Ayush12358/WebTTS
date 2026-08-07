@@ -54,6 +54,14 @@ export function Player() {
     const { registerBookmarks, clearBookmarks } = useHeaderActions();
 
     const [ttsConfig] = useTTSConfig();
+    const [engineStatus, setEngineStatus] = useState(null);
+
+    // Piper first-run setup progress (engine load + ~60MB voice model download).
+    // Only PiperEngine implements onStatus — other engines keep working unchanged.
+    useEffect(() => {
+        const engine = engines[ttsConfig.engineId];
+        if (engine?.onStatus) return engine.onStatus(setEngineStatus);
+    }, [ttsConfig.engineId]);
 
     // Playback State
     const [currentIndex, setCurrentIndex] = useState(-1);
@@ -750,6 +758,30 @@ export function Player() {
                 borderTop: '1px solid var(--border-color)',
                 padding: '0.5rem'
             }}>
+                {(engineStatus?.phase === 'loading' || engineStatus?.phase === 'downloading') && (
+                    <div role="status" aria-live="polite" style={{
+                        display: 'flex', alignItems: 'center', gap: '0.75rem',
+                        padding: '0.25rem 0.5rem 0.5rem',
+                        fontSize: '0.75rem', color: 'var(--text-secondary)'
+                    }}>
+                        <span style={{ flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {engineStatus.message}
+                        </span>
+                        <div style={{
+                            flex: 1, minWidth: '80px', height: '6px', borderRadius: '3px',
+                            background: 'var(--bg-secondary)', overflow: 'hidden'
+                        }}>
+                            {engineStatus.progress != null ? (
+                                <div style={{
+                                    height: '100%', width: `${Math.round(engineStatus.progress * 100)}%`,
+                                    background: 'var(--accent-color)', transition: 'width 0.2s ease'
+                                }} />
+                            ) : (
+                                <div className="tts-status-shimmer" style={{ height: '100%', width: '100%' }} />
+                            )}
+                        </div>
+                    </div>
+                )}
                 <Controls
                     playing={playing}
                     onPlayPause={togglePlay}
@@ -796,6 +828,15 @@ export function Player() {
                 background-color: rgba(255, 235, 59, 0.75) !important;
                 color: #1a1a1a !important;
                 outline-color: #facc15 !important;
+            }
+            .tts-status-shimmer {
+                background: linear-gradient(90deg, var(--accent-color) 0%, var(--bg-secondary) 50%, var(--accent-color) 100%);
+                background-size: 200% 100%;
+                animation: tts-status-shimmer 1.4s linear infinite;
+            }
+            @keyframes tts-status-shimmer {
+                from { background-position: 200% 0; }
+                to { background-position: -200% 0; }
             }
             img { max-width: 100%; height: auto; display: block; margin: 1rem auto; }
           `}</style>

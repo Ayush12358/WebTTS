@@ -1,18 +1,32 @@
 import { TTSEngine } from './TTSEngine';
 
 /**
- * Curated Piper voices (rhasspy/piper-voices ids). Listing voices must NOT load
- * any model — this list is static. Keep it small: each voice is a separate
- * ~60MB onnx model (verified: 60.3MB each on HF v1.0.0), downloaded on first
- * use.
+ * Piper voices (rhasspy/piper-voices ids, v1.0.0). The full en_GB set is
+ * enabled (11 voices, all tiers) plus two curated en_US voices. Listing voices
+ * must NOT load any model — this list is static. Sizes vary by tier: low
+ * ~20MB, medium ~60MB, high ~120MB onnx models, downloaded on first use.
  */
 const PIPER_VOICES = [
     { id: 'en_US-lessac-medium', name: 'Lessac (US Female)', lang: 'en-US', source: 'Piper' },
     { id: 'en_US-amy-medium', name: 'Amy (US Female)', lang: 'en-US', source: 'Piper' },
-    { id: 'en_GB-alan-medium', name: 'Alan (UK Male)', lang: 'en-GB', source: 'Piper' }
+    { id: 'en_GB-alan-low', name: 'Alan (UK Male, Low)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-alan-medium', name: 'Alan (UK Male)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-alba-medium', name: 'Alba (UK Female)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-aru-medium', name: 'Aru (UK, multi-speaker)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-cori-high', name: 'Cori (UK Female, High)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-cori-medium', name: 'Cori (UK Female)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-jenny_dioco-medium', name: 'Jenny Dioco (UK Female)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-northern_english_male-medium', name: 'Northern English Male (UK)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-semaine-medium', name: 'Semaine (UK Female, multi-speaker)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-southern_english_female-low', name: 'Southern English Female (UK, Low)', lang: 'en-GB', source: 'Piper' },
+    { id: 'en_GB-vctk-medium', name: 'VCTK (UK, multi-speaker)', lang: 'en-GB', source: 'Piper' }
 ];
 
 const DEFAULT_VOICE = 'en_US-lessac-medium';
+
+// HuggingFaceVoiceProvider's default baseUrl (its field is private, so the
+// streaming fetch() override replicates it).
+const PIPER_BASE_URL = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/';
 
 /**
  * Piper neural TTS running fully on-device via piper-tts-web
@@ -28,6 +42,32 @@ export class PiperEngine extends TTSEngine {
         this._genId = 0; // generation counter — invalidates in-flight speak() on stop()
         this._source = null;
         this._audioContext = null;
+        this._statusListeners = new Set();
+        // Own voice cache: the streaming fetch() below bypasses the package's
+        // internal FetchProvider cache, so repeated speaks of the same voice
+        // must not re-download (browser HTTP cache may also help across loads).
+        this._voiceCache = new Map(); // voiceId -> [configJson, blobUrl]
+    }
+
+    /**
+     * Subscribe to first-run setup status (engine load, voice model download).
+     * @param {(status: {phase: 'loading'|'downloading'|'ready', progress: number|null, message: string}) => void} callback
+     * @returns {() => void} unsubscribe
+     */
+    onStatus(callback) {
+        this._statusListeners.add(callback);
+        return () => this._statusListeners.delete(callback);
+    }
+
+    _emitStatus(status) {
+        // Listeners are UI-only — a throwing listener must never break synthesis.
+        for (const listener of this._statusListeners) {
+            try {
+                listener(status);
+            } catch (error) {
+                console.error('Piper status listener failed:', error);
+            }
+        }
     }
 
     async init() {
@@ -42,14 +82,17 @@ export class PiperEngine extends TTSEngine {
      * chunk (~44MB: transformers.js + onnxruntime + phonemize glue) out of the
      * main bundle (Vite code-splits it). Cached promise resets on rejection so
      * a later call retries.
-     * Model/session caching: the package caches voice models in memory only
-     * (FetchProvider keyed by URL — NOT Cache API), and OnnxWebRuntime caches
-     * an InferenceSession per model, so each voice downloads once per page
-     * session; the browser HTTP cache may serve repeats across loads.
+     * Model/session caching: the streaming voice fetch() caches each voice in
+     * _voiceCache (voiceId -> [config, blobUrl]) for the page session, and
+     * OnnxWebRuntime caches an InferenceSession per model; the browser HTTP
+     * cache may serve repeats across loads.
      * @returns {Promise<import('piper-tts-web').PiperWebEngine>}
      */
     _getEngine() {
         if (!this._enginePromise) {
+            // Emitted once per engine init; a retry after a failed import falls
+            // back through here again and re-emits.
+            this._emitStatus({ phase: 'loading', progress: null, message: 'Preparing Piper engine…' });
             this._enginePromise = import('piper-tts-web')
                 .then(({ PiperWebEngine, HuggingFaceVoiceProvider }) => {
                     // Applies the native piper `length_scale` to the voice config
@@ -57,13 +100,57 @@ export class PiperEngine extends TTSEngine {
                     // config JSON's `inference.length_scale`, which OnnxWebRuntime
                     // feeds to the model as the `scales` tensor (verified in package
                     // source) — true model-level rate control, not time-stretching.
+                    const self = this;
                     const voiceProvider = new (class extends HuggingFaceVoiceProvider {
                         lengthScale = 1;
 
                         async fetch(voice) {
-                            const data = await super.fetch(voice);
-                            data[0].inference.length_scale = this.lengthScale;
-                            return data;
+                            const applyScale = (data) => {
+                                data[0].inference.length_scale = this.lengthScale;
+                                return data;
+                            };
+                            const cached = self._voiceCache.get(voice);
+                            if (cached) return applyScale(cached);
+
+                            // URL building mirrors RemoteVoiceProvider.fetch() — its
+                            // #baseUrl is private, so replicate it here. Verified:
+                            // voice 'en_US-lessac-medium' -> .../en/en_US/lessac/medium/en_US-lessac-medium
+                            const voicePath = voice.split('-');
+                            const modelPath =
+                                PIPER_BASE_URL + voicePath[0].split('_')[0] + '/' + voicePath.join('/') + '/' + voicePath.join('-');
+                            const configUrl = modelPath + '.onnx.json';
+                            const onnxUrl = modelPath + '.onnx';
+
+                            const configResponse = await fetch(configUrl);
+                            if (!configResponse.ok) throw new Error('Could not fetch: ' + configUrl);
+                            const config = await configResponse.json();
+
+                            // Stream the ~60MB onnx so we can report real progress
+                            // instead of an indeterminate spinner.
+                            const onnxResponse = await fetch(onnxUrl);
+                            if (!onnxResponse.ok) throw new Error('Could not fetch: ' + onnxUrl);
+                            const total = Number(onnxResponse.headers.get('content-length')) || 0;
+                            const reader = onnxResponse.body.getReader();
+                            const chunks = [];
+                            let loaded = 0;
+                            for (;;) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
+                                chunks.push(value);
+                                loaded += value.length;
+                                const mb = ((total || loaded) / 1048576).toFixed(1);
+                                self._emitStatus({
+                                    phase: 'downloading',
+                                    progress: total ? loaded / total : null,
+                                    message: total
+                                        ? `Downloading voice model (${mb} MB) — ${Math.round((loaded / total) * 100)}%`
+                                        : `Downloading voice model (${mb} MB)`
+                                });
+                            }
+                            const data = [config, URL.createObjectURL(new Blob(chunks))];
+                            self._voiceCache.set(voice, data);
+                            self._emitStatus({ phase: 'ready', progress: null, message: 'Voice ready' });
+                            return applyScale(data);
                         }
                     })();
                     this._voiceProvider = voiceProvider;

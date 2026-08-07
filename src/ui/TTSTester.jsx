@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { engines, getAvailableEngines } from '../core/tts';
 import { Play, Square, RefreshCcw } from 'lucide-react';
 
@@ -10,6 +10,7 @@ export function TTSTester() {
     const [status, setStatus] = useState('Idle');
     const [logs, setLogs] = useState([]);
     const [controls, setControls] = useState({ rate: 1.0, pitch: 1.0 });
+    const lastStatusPhaseRef = useRef(null);
 
     const log = useCallback((msg) => {
         setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 50));
@@ -37,6 +38,21 @@ export function TTSTester() {
         const timer = setTimeout(loadVoices, 0);
         return () => clearTimeout(timer);
     }, [loadVoices]);
+
+    // Piper first-run setup status: reflect phase + % in the Status field and
+    // log one line per phase change (loading -> downloading -> ready).
+    useEffect(() => {
+        const engine = engines[selectedEngine];
+        if (!engine?.onStatus) return;
+        return engine.onStatus((status) => {
+            const label = status.progress != null ? `${status.phase} ${Math.round(status.progress * 100)}%` : status.phase;
+            setStatus(label);
+            if (status.phase !== lastStatusPhaseRef.current) {
+                lastStatusPhaseRef.current = status.phase;
+                log(`${label}${status.message ? ' — ' + status.message : ''}`);
+            }
+        });
+    }, [selectedEngine, log]);
 
     const handleSpeak = async () => {
         if (!selectedVoice) return;
