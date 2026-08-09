@@ -5,7 +5,7 @@
 ## Build & Run
 
 ```bash
-npm run dev       # Vite dev server (http://localhost:5173) — HMR, custom Edge TTS proxy middleware
+npm run dev       # Vite dev server (http://localhost:5173) — HMR, local OCR + TTS runtime asset plugins
 npm run build     # Production build → dist/
 npm run lint      # ESLint (uses flat config: eslint.config.js)
 npm run preview   # Preview dist/ locally
@@ -25,7 +25,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 |----------|-----------|---------------|------------------|
 | **Parsers** | `BookParser` | `src/core/parsers/index.js` | Extend `BookParser`, implement `canParse()` + `parse()`, add to the `parsers` array |
 | **TTS Engines** | `TTSEngine` | `src/core/tts/index.js` | Extend `TTSEngine`, implement `speak()`, add to the `engines` object |
-| **TTS engines in registry** | — | — | `webSpeech` (System TTS) · `edgeTTS` (Edge-only proxy) · `piper` (Piper on-device neural WASM, default) |
+| **TTS engines in registry** | — | — | `webSpeech` (System TTS), `kokoro` (Kokoro (On-device Neural)) |
 
 **Parser return shape** (from `parse()`): `{ title, author, cover: Blob|null, toc: [{ title, href, words, spineIndex? }], spineLength, instance }`
 
@@ -75,12 +75,6 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 - `bookStore.addBook()` now catches `QuotaExceededError` and throws `{ isQuotaError: true, message }`
 - Settings panel shows a storage usage progress bar + "Delete All Books" button
 
-## API (Vercel Serverless)
-
-- **`/api/edge-tts`** (POST) — WebSocket proxy to Bing Edge TTS. Streams MP3 audio. Query params: `text`, `voice`, `rate`, `pitch`.
-- **`/api/voices`** (GET) — Returns available Edge TTS voices (proxied from Bing, spoofed User-Agent).
-- `vercel.json` sets 60s timeout for API functions; SPA rewrite for client-side routing.
-
 ## Player Feature Details
 
 **Pointer event system** (`src/ui/Player.jsx`) — unified mouse + touch handling on `.reader-content` div:
@@ -93,17 +87,19 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 
 **Chapter auto-continue** — when the last sentence of a chapter finishes the player auto-loads and starts the next chapter (tracked via `autoContinueRef`, cleared on manual navigation/stop/config change); stops at book end.
 
+**Playback controls** — the play/pause button toggles true pause/resume: speech stops and resumes at the current sentence without losing position. A sleep timer stops playback automatically after a set duration.
+
 **Bookmark integration** — `BookmarkPanel` slides out from right with: search filter, text expand/collapse (>120 chars), chapter-aware styling (highlighted if current chapter), delete button, empty state guidance.
 
 **Loading skeletons** — all loading states use `<Skeleton />` with shimmer animation. Home shows 4 book card placeholders, TOC shows 6 chapter rows, Player shows 14 paragraph-lines.
 
 ## Pitfalls
 
-1. **Edge TTS is Edge-browser-only now** — The `TRUSTED_CLIENT_TOKEN` trick (in `vite.config.js` and `api/edge-tts.js`) is rejected by Bing from non-Edge origins, so the `/api/edge-tts` proxy and dev proxy stay as an Edge-only fallback. **Default engine: Piper** (`PiperEngine`, piper-tts-web WASM + onnxruntime-web, fully on-device). Each curated voice is a separate ~60MB onnx model fetched from Hugging Face (`rhasspy/piper-voices`) on first use — keep the curated voice list small. Rate is applied natively via the piper `length_scale` model parameter (1/rate). Runtime wasm (`/piper/`, `/onnx/`) is served/emitted by `piperAssetsPlugin`; the piper chunk and runtime assets are excluded from the PWA precache (over the 5MB cap, and offline voices are out of scope). Engine loads lazily on first `speak()`/`prefetch()` via dynamic import (code-split chunk).
+1. **Two TTS engines shipped: `webSpeech` + `kokoro`** — The registry pattern in `src/core/tts/` is the extension point for new sources: extend `TTSEngine`, implement `speak()`, register in `engines`/`getAvailableEngines()`. Stale persisted configs are handled: `Settings` falls back to `webSpeech` when the stored `engineId` no longer exists, and `Player` resolves `engines[ttsConfig.engineId] || engines.webSpeech` before speaking. Kokoro emits estimated word boundaries; Web Speech boundary events remain unreliable on Firefox/Safari.
 2. **IndexedDB quota** — ~50MB per origin. Large EPUBs with images can exceed it. Quota check warns on import but doesn't block; Settings shows usage bar.
 3. **PDF OCR** — Native text extraction is preferred; image-only pages use lazy local English Tesseract.js OCR. Complex layouts and non-English scans remain best-effort.
 4. **Web Speech API varies** — Sentence boundary events unreliable on Firefox/Safari.
 5. **Parsing blocks UI** — All parsing on main thread (no Web Workers). Large books cause ~2-5s lag on import.
-6. **Google Cloud API key** — Stored in `localStorage`, exposed in client fetch requests. Fine for testing; use a backend proxy for production.
+6. **Kokoro model storage** — The ~88MB quantized Kokoro model downloads on first use and is cached via the Cache API (transformers.js cache), subject to origin quota. It can be deleted from Settings to reclaim space.
 7. **Prefetch race conditions** — `playNextRef` and `prefetchRef` track async state; be careful when modifying playback logic. Only 1 sentence is prefetched ahead (single `{ index, promise }` slot).
 8. **Swipe vs scroll disambiguation** — Direction is decided at 5px movement threshold. If the user starts a swipe diagonally, the first 5px of dominant direction wins. Changing `touchAction` off `pan-y pinch-zoom` would break this.
