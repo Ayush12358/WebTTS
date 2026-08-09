@@ -1,4 +1,5 @@
 import createDOMPurify from 'dompurify';
+import { splitIntoSizedChunks } from './tts/ttsUtils.js';
 
 const ALLOWED_TAGS = [
     'a', 'article', 'b', 'blockquote', 'br', 'code', 'dd', 'div', 'dl', 'dt',
@@ -120,6 +121,16 @@ export function normalizeOcrWords(words) {
 
 /**
  * Add reader segment markers to sanitized HTML.
+ *
+ * Speakable elements whose trimmed text is <= 500 chars keep the single-element
+ * marking (with `data-tts-text`). Longer elements are kept as unmarked
+ * containers; every direct text node longer than 500 chars is split into
+ * sequential `.tts-speakable` chunk spans (inline markup is preserved — text is
+ * NEVER flattened via textContent). Chunk-boundary whitespace is retained as
+ * literal `' '` text nodes between adjacent spans, and each chunked text node's
+ * original leading/trailing whitespace survives as literal text nodes around
+ * its spans — trimming applies only to `data-tts-text` and chunk-internal
+ * boundaries, never to rendered whitespace.
  * @param {string} html
  * @returns {{ html: string, segments: Array<{ id: number, text: string }> }}
  */
@@ -137,11 +148,50 @@ export function prepareHtmlContent(html) {
         const text = (element.innerText || element.textContent || '').trim();
         if (!text) return;
 
-        const id = segments.length;
-        element.classList.add('tts-speakable');
-        element.setAttribute('data-tts-index', String(id));
-        element.setAttribute('data-tts-text', text);
-        segments.push({ id, text });
+        if (text.length <= 500) {
+            const id = segments.length;
+            element.classList.add('tts-speakable');
+            element.setAttribute('data-tts-index', String(id));
+            element.setAttribute('data-tts-text', text);
+            segments.push({ id, text });
+            return;
+        }
+
+        // Long element: keep it as an unmarked container and chunk every direct
+        // text node longer than 500 chars independently, preserving inline tags.
+        Array.from(element.childNodes).forEach(child => {
+            if (child.nodeType !== Node.TEXT_NODE) return;
+            const raw = child.nodeValue || '';
+            if (raw.length <= 500) return;
+
+            const chunks = splitIntoSizedChunks(raw, 500);
+            if (!chunks.length) return;
+
+            // Preserve the text node's original leading/trailing whitespace as
+            // literal text nodes around the chunk spans (trimming applies only
+            // to data-tts-text and chunk-internal boundaries).
+            const leading = raw.match(/^\s+/)?.[0] || '';
+            const trailing = raw.match(/\s+$/)?.[0] || '';
+
+            const replacement = [];
+            if (leading) replacement.push(document.createTextNode(leading));
+            chunks.forEach((chunk, i) => {
+                if (i > 0) replacement.push(document.createTextNode(' '));
+                const span = document.createElement('span');
+                span.className = 'tts-speakable';
+                const id = segments.length;
+                span.setAttribute('data-tts-index', String(id));
+                span.setAttribute('data-tts-text', chunk);
+                span.textContent = chunk;
+                segments.push({ id, text: chunk });
+                replacement.push(span);
+            });
+            if (trailing) replacement.push(document.createTextNode(trailing));
+
+            const parent = child.parentNode;
+            replacement.forEach(node => parent.insertBefore(node, child));
+            parent.removeChild(child);
+        });
     });
 
     return { html: container.innerHTML, segments };

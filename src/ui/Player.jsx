@@ -28,6 +28,33 @@ function resolveSegmentTarget(target, root) {
     return null;
 }
 
+/**
+ * Resolve a bookmark segment by exact `data-tts-text` match against the
+ * rendered chapter DOM. Books repeat short sentences, so among text-equal
+ * elements the one whose `data-tts-index === nodeIndex` wins; the first
+ * text-equal element is the fallback when no index matches. Returns null when
+ * no element has exactly this text (caller falls back to nodeIndex).
+ * @param {Element} root
+ * @param {string} text
+ * @param {number|string} nodeIndex
+ * @returns {{ index: number, text: string, node: Element }|null}
+ */
+function resolveSegmentByText(root, text, nodeIndex) {
+    if (!root || !text) return null;
+    const wantIndex = Number.isInteger(Number(nodeIndex)) ? Number(nodeIndex) : null;
+    let firstMatch = null;
+    let indexMatch = null;
+    root.querySelectorAll('.tts-speakable').forEach(node => {
+        const segment = getElementSegment(node);
+        if (!segment || segment.text !== text) return;
+        if (!firstMatch) firstMatch = { ...segment, node };
+        if (wantIndex !== null && segment.index === wantIndex && !indexMatch) {
+            indexMatch = { ...segment, node };
+        }
+    });
+    return indexMatch || firstMatch;
+}
+
 function setSegmentClass(root, index, className, enabled) {
     if (!root) return;
     root.querySelectorAll(`[data-tts-index="${index}"], [data-tts-segment-index="${index}"]`).forEach(node => {
@@ -56,8 +83,7 @@ export function Player() {
     const [ttsConfig] = useTTSConfig();
     const [engineStatus, setEngineStatus] = useState(null);
 
-    // Piper first-run setup progress (engine load + ~60MB voice model download).
-    // Only PiperEngine implements onStatus — other engines keep working unchanged.
+    // Optional engine setup-status reporting (some engines implement onStatus).
     useEffect(() => {
         const engine = engines[ttsConfig.engineId];
         if (engine?.onStatus) return engine.onStatus(setEngineStatus);
@@ -260,15 +286,31 @@ export function Player() {
             playNextRef.current(0);
         }
 
+        // Bookmark compat: re-segmentation (500-char chunking) shifts
+        // .tts-speakable ordinals, so match stored text against the rendered
+        // chapter's data-tts-text FIRST (index tiebreak among text-equal
+        // elements); nodeIndex is the fallback when no exact text match exists.
+        // Accepted limitation: pre-fix bookmarks in a re-segmented chapter that
+        // were jumped from another chapter degrade to the nodeIndex fallback
+        // (text lookup runs only against the currently rendered chapter DOM).
         const chapterBookmarks = bookmarks.filter(b => parseInt(b.spineIndex, 10) === currentSpineIndex);
         chapterBookmarks.forEach(bookmark => {
-            const index = parseInt(bookmark.nodeIndex, 10);
-            if (Number.isInteger(index)) setSegmentClass(container, index, 'is-bookmarked', true);
+            const segment = resolveSegmentByText(container, bookmark.text, parseInt(bookmark.nodeIndex, 10));
+            const index = segment ? segment.index : parseInt(bookmark.nodeIndex, 10);
+            if (segment || Number.isInteger(index)) setSegmentClass(container, index, 'is-bookmarked', true);
         });
 
         const rawNodeToJump = searchParams.get('node');
-        const nodeToJump = rawNodeToJump === null ? currentIndex : parseInt(rawNodeToJump, 10);
+        let nodeToJump = rawNodeToJump === null ? currentIndex : parseInt(rawNodeToJump, 10);
         if (Number.isInteger(nodeToJump) && nodeToJump >= 0 && items.length > 0) {
+            // Text-first jump resolution: when the jump target matches a stored
+            // bookmark, re-resolve by exact text so re-segmented chapters land
+            // on the right sentence (fallback: plain nodeIndex scroll).
+            const jumpBookmark = chapterBookmarks.find(b => parseInt(b.nodeIndex, 10) === nodeToJump);
+            if (jumpBookmark) {
+                const resolved = resolveSegmentByText(container, jumpBookmark.text, nodeToJump);
+                if (resolved) nodeToJump = resolved.index;
+            }
             const target = items.find(item => item.index === nodeToJump);
             if (target) {
                 setTimeout(() => {
@@ -393,7 +435,7 @@ export function Player() {
             }
         }
 
-        const speechEngine = engines[ttsConfig.engineId];
+        const speechEngine = engines[ttsConfig.engineId] || engines.webSpeech;
         if (!speechEngine) return;
 
         try {
@@ -525,9 +567,21 @@ export function Player() {
             const si = parseInt(spineIndex);
             const ni = parseInt(nodeIndex);
 
+            // SAVE PATH: persist the segment's trimmed data-tts-text (never raw
+            // textContent) so bookmark text matches data-tts-text exactly.
+            const node = contentRef.current?.querySelector(`.tts-speakable[data-tts-index="${ni}"]`);
+            const saveText = node?.getAttribute('data-tts-text') || text;
+
+            // DEDUPE: an existing bookmark means the SAME sentence — same spine,
+            // same nodeIndex AND same text. A text-only match at a different
+            // nodeIndex is a DIFFERENT sentence (duplicate text is common in
+            // books) and must NOT dedupe. addBookmark truncates long texts for
+            // storage, so also compare against the stored (truncated) form.
+            const storedText = (t) => (t.length > 100 ? `${t.substring(0, 100)}...` : t);
             const existing = bookmarks.find(b =>
                 parseInt(b.spineIndex) === si &&
-                parseInt(b.nodeIndex) === ni
+                parseInt(b.nodeIndex) === ni &&
+                (b.text === saveText || b.text === storedText(saveText))
             );
 
             if (existing) {
@@ -537,7 +591,7 @@ export function Player() {
                 if (target) setSegmentClass(contentRef.current, ni, 'is-bookmarked', false);
             } else {
                 const chapterId = bookMeta?.toc?.[si]?.id || null;
-                const newB = await bookStore.addBookmark(id, si, ni, text, chapterId);
+                const newB = await bookStore.addBookmark(id, si, ni, saveText, chapterId);
                 setBookmarks(prev => [...prev, newB]);
                 const target = currentNodes.current.find(n => n.index === ni);
                 if (target) setSegmentClass(contentRef.current, ni, 'is-bookmarked', true);
@@ -763,7 +817,26 @@ export function Player() {
                 bookmarks={bookmarks}
                 currentSpineIndex={currentSpineIndex}
                 onNavigate={(spineIndex, nodeIndex) => {
-                    navigate(`/book/${id}/read/${spineIndex}?node=${nodeIndex}`);
+                    // Text-first resolution (bookmark compat): 500-char
+                    // re-segmentation shifts .tts-speakable ordinals, so when
+                    // the bookmark's chapter is rendered, resolve its stored
+                    // text against the DOM (index tiebreak) before navigating.
+                    // For bookmarks in another chapter, text lookup runs in the
+                    // post-render effect once that chapter's nodes exist.
+                    // Accepted limitation: pre-fix bookmarks jumped from another
+                    // chapter degrade to the nodeIndex fallback.
+                    let targetIndex = nodeIndex;
+                    if (parseInt(spineIndex, 10) === currentSpineIndex) {
+                        const bookmark = bookmarks.find(b =>
+                            parseInt(b.spineIndex, 10) === parseInt(spineIndex, 10) &&
+                            parseInt(b.nodeIndex, 10) === parseInt(nodeIndex, 10)
+                        );
+                        const resolved = bookmark
+                            ? resolveSegmentByText(contentRef.current, bookmark.text, parseInt(bookmark.nodeIndex, 10))
+                            : null;
+                        if (resolved) targetIndex = resolved.index;
+                    }
+                    navigate(`/book/${id}/read/${spineIndex}?node=${targetIndex}`);
                     setShowBookmarks(false);
                 }}
                 onDelete={async (bookmarkId) => {
