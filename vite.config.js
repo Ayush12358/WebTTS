@@ -58,11 +58,20 @@ const localOcrAssetsPlugin = () => {
  * base64-gzip, and it uses neither `new URL(..., import.meta.url)` nor a
  * configurable path — so there is nothing to serve under /tts/phonemize/ and
  * no CDN reference possible; it rolls into the app JS bundle like any import.
+ *
+ * T4 RUNTIME TRACE (completion of the discovery gate): onnxruntime-web 1.22-dev
+ * resolves EVERY wasm session against wasmPaths as wasmPaths +
+ * 'ort-wasm-simd-threaded.jsep.mjs' — a 44KB Emscripten glue module that is
+ * dynamically imported (Vite dev must serve it with a JS MIME type, which rules
+ * out the /public dir — Vite refuses to transform public files) and then
+ * fetches its sibling 'ort-wasm-simd-threaded.jsep.wasm' via locateFile
+ * resolved against wasmPaths. Serve the glue here alongside the binaries.
  */
 const ttsAssetsPlugin = () => {
   const assets = new Map([
     ['tts/onnx/ort-wasm-simd-threaded.wasm', new URL('./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', import.meta.url)],
-    ['tts/onnx/ort-wasm-simd-threaded.jsep.wasm', new URL('./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm', import.meta.url)]
+    ['tts/onnx/ort-wasm-simd-threaded.jsep.wasm', new URL('./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm', import.meta.url)],
+    ['tts/onnx/ort-wasm-simd-threaded.jsep.mjs', new URL('./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs', import.meta.url)]
   ]);
 
   const getAssetKey = (url) => {
@@ -82,7 +91,7 @@ const ttsAssetsPlugin = () => {
           return;
         }
 
-        res.setHeader('Content-Type', key.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream');
+        res.setHeader('Content-Type', key.endsWith('.wasm') ? 'application/wasm' : (key.endsWith('.mjs') ? 'text/javascript' : 'application/octet-stream'));
         res.end(fs.readFileSync(fileURLToPath(source)));
       });
     },
