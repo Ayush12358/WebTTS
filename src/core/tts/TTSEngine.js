@@ -25,10 +25,15 @@ export class TTSEngine {
     }
 
     /**
-     * Prefetch audio for text
+     * Prefetch audio for text.
+     * Resolves to an opaque engine-defined `audioObject`, or null when the
+     * engine does not prefetch (WebSpeechEngine never does). Prior-art engines
+     * return `{ audio: Float32Array, sampleRate }` (Kokoro) or `{ file: Blob,
+     * duration }` (Piper). Player passes the result back to `speak()` as
+     * `options.audioObject`.
      * @param {string} text 
      * @param {object} options 
-     * @returns {Promise<HTMLAudioElement|null>}
+     * @returns {Promise<Object|null>}
      */
     async prefetch() {
         return null;
