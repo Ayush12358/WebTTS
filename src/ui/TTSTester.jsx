@@ -4,7 +4,7 @@ import { Play, Square, RefreshCcw } from 'lucide-react';
 
 export function TTSTester() {
     const [text, setText] = useState("This is a simple test of the text-to-speech system.");
-    const [selectedEngine, setSelectedEngine] = useState('piper');
+    const [selectedEngine, setSelectedEngine] = useState('webSpeech');
     const [selectedVoice, setSelectedVoice] = useState('');
     const [voices, setVoices] = useState([]);
     const [status, setStatus] = useState('Idle');
@@ -39,8 +39,8 @@ export function TTSTester() {
         return () => clearTimeout(timer);
     }, [loadVoices]);
 
-    // Piper first-run setup status: reflect phase + % in the Status field and
-    // log one line per phase change (loading -> downloading -> ready).
+    // Engine setup-status reporting (if the engine implements onStatus): reflect
+    // phase + % in the Status field and log one line per phase change.
     useEffect(() => {
         const engine = engines[selectedEngine];
         if (!engine?.onStatus) return;
@@ -65,6 +65,7 @@ export function TTSTester() {
                 pitch: controls.pitch
             }, {
                 onStart: () => setStatus('Playing'),
+                onBoundary: (b) => log(`Boundary ${b.name} @${b.charIndex}+${b.charLength}`),
                 onEnd: () => setStatus('Finished'),
                 onError: (e) => {
                     setStatus('Error');
