@@ -459,6 +459,15 @@ export function Player() {
         contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
     }, [ttsConfig.engineId]);
 
+    // A Settings voice preview shares this engine singleton — its speak()
+    // kills the Player's active one, so reset via the Player-level path.
+    // The preview itself stays standalone (Settings never writes Player state).
+    useEffect(() => {
+        const handlePreviewStarted = () => stopTTS();
+        window.addEventListener('webtts:preview-started', handlePreviewStarted);
+        return () => window.removeEventListener('webtts:preview-started', handlePreviewStarted);
+    }, [stopTTS]);
+
     // Countdown: 1s tick only while playing and not paused; the interval is
     // torn down on pause/stop but the remaining seconds live in state, so the
     // countdown freezes (and survives navigation/auto-continue).

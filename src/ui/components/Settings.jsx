@@ -15,6 +15,7 @@ export function Settings({ config, onConfigChange }) {
     const [modelInfo, setModelInfo] = useState(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const previewGenRef = useRef(0);
+    const previewActiveRef = useRef(false); // true while a preview speak is actually in flight
     const [sleepTimerEnabled, setSleepTimerEnabled] = useState(false);
     const [sleepTimerMinutes, setSleepTimerMinutes] = useState('15');
     const { showToast } = useToast();
@@ -23,10 +24,16 @@ export function Settings({ config, onConfigChange }) {
 
     // Voice preview — standalone: never routed through Player state. The gen
     // counter invalidates stale callbacks (an onEnd from a stopped preview must
-    // not clobber the state of a newer preview).
+    // not clobber the state of a newer preview). The engine is a shared
+    // singleton with the Player, so stop() runs ONLY while a preview is
+    // actually in flight — a bare close/engine-change with no preview must
+    // never kill the Player's active speak() (F2 MAJOR).
     const stopPreview = useCallback(() => {
         previewGenRef.current++;
-        engines[config.engineId]?.stop?.();
+        if (previewActiveRef.current) {
+            engines[config.engineId]?.stop?.();
+            previewActiveRef.current = false;
+        }
         setIsPreviewing(false);
     }, [config.engineId]);
 
@@ -39,16 +46,27 @@ export function Settings({ config, onConfigChange }) {
         const engine = engines[config.engineId];
         if (!engine) return;
         setIsPreviewing(true);
+        previewActiveRef.current = true;
+        // The Player shares this engine singleton — its active speak() dies the
+        // moment this preview starts. Tell it to reset cleanly; the preview
+        // itself stays standalone (no Player state writes from here).
+        window.dispatchEvent(new CustomEvent('webtts:preview-started', { detail: { engineId: config.engineId } }));
         engine.speak(
             SAMPLE_TEXT,
             { voiceId: config.voiceId || undefined, rate: config.rate, pitch: config.pitch },
             {
                 onEnd: () => {
-                    if (gen === previewGenRef.current) setIsPreviewing(false);
+                    if (gen === previewGenRef.current) {
+                        previewActiveRef.current = false;
+                        setIsPreviewing(false);
+                    }
                 },
                 onError: (error) => {
                     console.error('Voice preview failed:', error);
-                    if (gen === previewGenRef.current) setIsPreviewing(false);
+                    if (gen === previewGenRef.current) {
+                        previewActiveRef.current = false;
+                        setIsPreviewing(false);
+                    }
                     showToast('Preview failed', 'error');
                 }
             }
