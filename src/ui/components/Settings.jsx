@@ -15,6 +15,8 @@ export function Settings({ config, onConfigChange }) {
     const [modelInfo, setModelInfo] = useState(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const previewGenRef = useRef(0);
+    const [sleepTimerEnabled, setSleepTimerEnabled] = useState(false);
+    const [sleepTimerMinutes, setSleepTimerMinutes] = useState('15');
     const { showToast } = useToast();
 
     const availableEngines = getAvailableEngines();
@@ -123,6 +125,35 @@ export function Settings({ config, onConfigChange }) {
         if (isOpen) loadStorage();
     }, [config, onConfigChange, isOpen, showToast]);
 
+    // Sleep timer — load persisted value on open; mirror external changes
+    // (Player disables it at expiry, so the checkbox must follow).
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const saved = await bookStore.getSettings('sleepTimer');
+                if (!cancelled && saved) {
+                    setSleepTimerEnabled(!!saved.enabled);
+                    setSleepTimerMinutes(String(saved.minutes ?? 15));
+                }
+            } catch (error) {
+                console.error('Failed to load sleep timer', error);
+            }
+        };
+        load();
+        const handleChange = (event) => {
+            if (!event.detail) return;
+            setSleepTimerEnabled(!!event.detail.enabled);
+            setSleepTimerMinutes(String(event.detail.minutes ?? 15));
+        };
+        window.addEventListener('webtts:sleep-timer-changed', handleChange);
+        return () => {
+            cancelled = true;
+            window.removeEventListener('webtts:sleep-timer-changed', handleChange);
+        };
+    }, [isOpen]);
+
     const handleEngineChange = (e) => {
         stopPreview(); // stop the outgoing engine's preview audio
         onConfigChange({ ...config, engineId: e.target.value, voiceId: '' });
@@ -139,6 +170,29 @@ export function Settings({ config, onConfigChange }) {
 
     const handlePitchChange = (e) => {
         onConfigChange({ ...config, pitch: parseFloat(e.target.value) });
+    };
+
+    // Sleep timer — persisted + broadcast so the Player reacts without prop drilling.
+    const applySleepTimer = useCallback((value) => {
+        window.dispatchEvent(new CustomEvent('webtts:sleep-timer-changed', { detail: value }));
+        bookStore.saveSettings('sleepTimer', value).catch(error => {
+            console.error('Failed to save sleep timer', error);
+            showToast('Could not save sleep timer.', 'error');
+        });
+    }, [showToast]);
+
+    const handleSleepTimerToggle = (e) => {
+        const enabled = e.target.checked;
+        setSleepTimerEnabled(enabled);
+        applySleepTimer({ enabled, minutes: Math.max(1, parseInt(sleepTimerMinutes, 10) || 15) });
+    };
+
+    const handleSleepTimerMinutesChange = (e) => {
+        const raw = e.target.value;
+        setSleepTimerMinutes(raw);
+        const minutes = parseInt(raw, 10);
+        if (!Number.isInteger(minutes) || minutes < 1) return; // keep typing; persist only valid values
+        if (sleepTimerEnabled) applySleepTimer({ enabled: true, minutes });
     };
 
 
@@ -303,6 +357,36 @@ export function Settings({ config, onConfigChange }) {
                         Pitch is not supported by this engine.
                     </p>
                 )}
+            </div>
+
+            {/* Sleep Timer */}
+            <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                    <input
+                        type="checkbox"
+                        checked={sleepTimerEnabled}
+                        onChange={handleSleepTimerToggle}
+                        style={{ marginRight: '0.5rem' }}
+                    />
+                    Sleep timer
+                </label>
+                <input
+                    id="sleep-timer-minutes"
+                    type="number"
+                    min="1"
+                    max="720"
+                    list="sleep-timer-presets"
+                    value={sleepTimerMinutes}
+                    onChange={handleSleepTimerMinutesChange}
+                    disabled={!sleepTimerEnabled}
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', boxSizing: 'border-box' }}
+                />
+                <datalist id="sleep-timer-presets">
+                    {[5, 10, 15, 30, 45, 60].map(m => <option key={m} value={m} />)}
+                </datalist>
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Stop playback after this many minutes. Counts only while audio is playing.
+                </p>
             </div>
 
             {/* Storage Usage */}

@@ -10,6 +10,8 @@ import { Skeleton } from './components/Skeleton';
 import { useHeaderActions } from './components/HeaderActions';
 import { useTTSConfig } from '../core/useTTSConfig';
 import { getElementSegment, prepareHtmlContent, splitTextIntoSegments } from '../core/content';
+import { Clock } from 'lucide-react';
+import { useToast } from './components/Toast';
 
 function resolveSegmentTarget(target, root) {
     let node = target;
@@ -62,6 +64,10 @@ function setSegmentClass(root, index, className, enabled) {
     });
 }
 
+function formatSleepTime(seconds) {
+    return seconds >= 60 ? `${Math.ceil(seconds / 60)}m` : `${Math.max(0, Math.round(seconds))}s`;
+}
+
 export function Player() {
     const { id, cfi } = useParams();
     const [book, setBook] = useState(null);
@@ -105,6 +111,35 @@ export function Player() {
     const [paused, setPaused] = useState(false);
     const pausedRef = useRef(false);
     useEffect(() => { pausedRef.current = paused; }, [paused]);
+
+    // Sleep timer — armed from Settings via webtts:sleep-timer-changed; counts
+    // down only while actually playing (pause/stop freeze it); ONLY expiry
+    // disables it — manual stop/navigation/auto-continue leave it armed.
+    const [sleepTimer, setSleepTimer] = useState({ enabled: false, minutes: 15 });
+    const [sleepSecondsLeft, setSleepSecondsLeft] = useState(null);
+    const { showToast } = useToast();
+
+    useEffect(() => {
+        const handleChange = (event) => {
+            if (!event.detail) return;
+            setSleepTimer(event.detail);
+            setSleepSecondsLeft(event.detail.enabled ? Math.round(event.detail.minutes * 60) : null);
+        };
+        const load = async () => {
+            try {
+                const saved = await bookStore.getSettings('sleepTimer');
+                if (saved && saved.enabled) {
+                    setSleepTimer(saved);
+                    setSleepSecondsLeft(Math.round((saved.minutes || 15) * 60));
+                }
+            } catch (error) {
+                console.error('Failed to load sleep timer', error);
+            }
+        };
+        load();
+        window.addEventListener('webtts:sleep-timer-changed', handleChange);
+        return () => window.removeEventListener('webtts:sleep-timer-changed', handleChange);
+    }, []);
 
     // Chapter auto-continue: set when the last sentence of a chapter ends and a
     // next chapter exists; consumed by the post-render effect once its nodes load.
@@ -423,6 +458,44 @@ export function Player() {
         if (engine) engine.stop();
         contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
     }, [ttsConfig.engineId]);
+
+    // Countdown: 1s tick only while playing and not paused; the interval is
+    // torn down on pause/stop but the remaining seconds live in state, so the
+    // countdown freezes (and survives navigation/auto-continue).
+    const sleepTimerRef = useRef(sleepTimer);
+    const sleepSecondsLeftRef = useRef(sleepSecondsLeft);
+    useEffect(() => { sleepTimerRef.current = sleepTimer; }, [sleepTimer]);
+    useEffect(() => { sleepSecondsLeftRef.current = sleepSecondsLeft; }, [sleepSecondsLeft]);
+
+    // Expiry: stop via the Player-level path (raw engine.stop would leave the
+    // playing state stuck), disable + persist, notify. stopTTS also clears
+    // autoContinueRef, so a pending chapter auto-continue is cancelled too.
+    const handleSleepTimerExpiry = useCallback(() => {
+        stopTTS();
+        setSleepSecondsLeft(null);
+        setSleepTimer(prev => ({ ...prev, enabled: false }));
+        bookStore.saveSettings('sleepTimer', { ...sleepTimerRef.current, enabled: false }).catch(error => {
+            console.error('Failed to disable sleep timer', error);
+            showToast('Could not disable sleep timer.', 'error');
+        });
+        showToast('Sleep timer finished.', 'info');
+    }, [stopTTS, showToast]);
+
+    useEffect(() => {
+        if (!sleepTimer.enabled || !playing || paused) return;
+        let interval;
+        interval = setInterval(() => {
+            const current = sleepSecondsLeftRef.current ?? sleepTimer.minutes * 60;
+            if (current <= 1) {
+                clearInterval(interval);
+                setSleepSecondsLeft(0);
+                handleSleepTimerExpiry();
+            } else {
+                setSleepSecondsLeft(current - 1);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [sleepTimer.enabled, sleepTimer.minutes, playing, paused, handleSleepTimerExpiry]);
 
     const playFromIndex = useCallback(async (index) => {
         const requestId = ++playbackRequestRef.current;
@@ -922,7 +995,8 @@ export function Player() {
                 flexShrink: 0,
                 background: 'var(--bg-primary)',
                 borderTop: '1px solid var(--border-color)',
-                padding: '0.5rem'
+                padding: '0.5rem',
+                position: 'relative'
             }}>
                 {(engineStatus?.phase === 'loading' || engineStatus?.phase === 'downloading') && (
                     <div role="status" aria-live="polite" style={{
@@ -957,6 +1031,22 @@ export function Player() {
                     canPrev={currentIndex > 0}
                     canNext={currentIndex >= 0 && currentIndex < currentNodeCount - 1}
                 />
+                {sleepTimer.enabled && (
+                    <div className="sleep-timer-chip" style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        top: '0.4rem',
+                        display: 'flex', alignItems: 'center', gap: '0.3rem',
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '999px',
+                        padding: '0.15rem 0.6rem'
+                    }}>
+                        <Clock size={13} /> zzz {formatSleepTime(sleepSecondsLeft ?? sleepTimer.minutes * 60)}
+                    </div>
+                )}
             </div>
 
             <style>{`
