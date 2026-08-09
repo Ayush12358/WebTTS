@@ -43,7 +43,7 @@ export class KokoroEngine extends TTSEngine {
         this._audioContext = null;
         this._pauseRequested = false; // pending-pause flag: set by pause(), cleared by speak/stop/resume
         this._statusListeners = new Set();
-        this._statusActive = false; // true while a loading/downloading/ready status is being shown
+        this._statusActive = false; // true while a loading/downloading status is being shown
         this._worker = null; // synthesis worker (worker-first, main-thread fallback)
         this._workerFailed = false; // sticky — a broken worker never gets recreated
         this._workerReqId = 0;
@@ -70,7 +70,7 @@ export class KokoroEngine extends TTSEngine {
                 console.error('Kokoro status listener failed:', error);
             }
         }
-        this._statusActive = status.phase === 'loading' || status.phase === 'downloading' || status.phase === 'ready';
+        this._statusActive = status.phase === 'loading' || status.phase === 'downloading';
     }
 
     async init() {
@@ -460,6 +460,9 @@ export class KokoroEngine extends TTSEngine {
         // 'replay from start' behavior would be unachievable.
         this._pauseRequested = true;
         this._audioContext?.suspend().catch(() => { });
+        // Boundaries are diagnostics — while suspended they must stop firing
+        // (the held-source case stays correct: resume() re-anchors offsets).
+        this._clearBoundaryTimers();
     }
 
     resume() {
