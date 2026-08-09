@@ -95,7 +95,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 
 ## Pitfalls
 
-1. **Two TTS engines shipped: `webSpeech` + `kokoro`** — The registry pattern in `src/core/tts/` is the extension point for new sources: extend `TTSEngine`, implement `speak()`, register in `engines`/`getAvailableEngines()`. Stale persisted configs are handled: `Settings` falls back to `webSpeech` when the stored `engineId` no longer exists, and `Player` resolves `engines[ttsConfig.engineId] || engines.webSpeech` before speaking. Kokoro emits estimated word boundaries; Web Speech boundary events remain unreliable on Firefox/Safari.
+1. **Two TTS engines shipped: `webSpeech` + `kokoro`** — The registry pattern in `src/core/tts/` is the extension point for new sources: extend `TTSEngine`, implement `speak()`, register in `engines`/`getAvailableEngines()`. Stale persisted configs are handled: `Settings` falls back to `webSpeech` when the stored `engineId` no longer exists, and `Player` resolves `engines[ttsConfig.engineId] || engines.webSpeech` before speaking. Kokoro emits estimated word boundaries; Web Speech boundary events remain unreliable on Firefox/Safari. Estimated word boundaries are emitted only by the Kokoro engine; the Web Speech engine does not emit them (unreliable in Firefox/Chrome Android) — a documented omission.
 2. **IndexedDB quota** — ~50MB per origin. Large EPUBs with images can exceed it. Quota check warns on import but doesn't block; Settings shows usage bar.
 3. **PDF OCR** — Native text extraction is preferred; image-only pages use lazy local English Tesseract.js OCR. Complex layouts and non-English scans remain best-effort.
 4. **Web Speech API varies** — Sentence boundary events unreliable on Firefox/Safari.
