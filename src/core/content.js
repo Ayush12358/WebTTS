@@ -120,6 +120,101 @@ export function normalizeOcrWords(words) {
 }
 
 /**
+ * Flow-chunk an element whose trimmed text exceeds `maxChars` but whose every
+ * direct text node is <= `maxChars` (heavily inline-marked content, e.g.
+ * `<p>word <em>a</em> word <em>b</em> ...</p>` totaling >500 chars). The
+ * element stays an unmarked container; its content is tokenized in document
+ * order into atomic WORD tokens (from text nodes) and INLINE ELEMENT tokens
+ * (elements with <= `maxChars` text, appended whole so markup survives), packed
+ * greedily into chunks of at most `maxChars` plain-text chars (a single token
+ * longer than the cap — an unbroken word — becomes its own oversized single-
+ * word chunk, the documented exception), and rebuilt as sequential
+ * `.tts-speakable` spans with trimmed single-space `data-tts-text`. An inline
+ * element itself longer than `maxChars` is never absorbed: it is flow-chunked
+ * recursively in place as its own unmarked container. The element's original
+ * leading/trailing whitespace survives as literal text nodes around the spans;
+ * trimming applies only to `data-tts-text`.
+ * @param {Element} element
+ * @param {Array<{ id: number, text: string }>} segments
+ * @param {number} maxChars
+ */
+function flowChunkElement(element, segments, maxChars) {
+    const tokens = [];
+    for (const child of Array.from(element.childNodes)) {
+        if (child.nodeType === Node.TEXT_NODE) {
+            for (const word of (child.nodeValue || '').split(/\s+/)) {
+                if (word) tokens.push({ kind: 'word', text: word, len: word.length });
+            }
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+            const len = (child.textContent || '').trim().length;
+            tokens.push({ kind: len > maxChars ? 'oversized' : 'inline', node: child, len });
+        }
+    }
+
+    // Preserve the element's original leading/trailing whitespace (from its
+    // edge text nodes) as literal text nodes around the rebuilt spans.
+    const firstChild = element.firstChild;
+    const lastChild = element.lastChild;
+    const leading = firstChild?.nodeType === Node.TEXT_NODE ? (firstChild.nodeValue || '').match(/^\s+/)?.[0] || '' : '';
+    const trailing = lastChild?.nodeType === Node.TEXT_NODE ? (lastChild.nodeValue || '').match(/\s+$/)?.[0] || '' : '';
+
+    const fragment = document.createDocumentFragment();
+    if (leading) fragment.appendChild(document.createTextNode(leading));
+
+    let pack = [];
+    let packLen = 0;
+    // Separates consecutive content items (chunk spans / recursed containers)
+    // with a literal ' ' text node so rendered words never merge at boundaries.
+    let hasContentItem = false;
+    const flushChunk = () => {
+        if (!pack.length) return;
+        const span = document.createElement('span');
+        span.className = 'tts-speakable';
+        const id = segments.length;
+        const text = pack
+            .map(token => (token.kind === 'word' ? token.text : token.node.textContent || ''))
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        span.setAttribute('data-tts-index', String(id));
+        span.setAttribute('data-tts-text', text);
+        segments.push({ id, text });
+        pack.forEach((token, i) => {
+            if (i > 0) span.appendChild(document.createTextNode(' '));
+            if (token.kind === 'word') span.appendChild(document.createTextNode(token.text));
+            else span.appendChild(token.node);
+        });
+        if (hasContentItem) fragment.appendChild(document.createTextNode(' '));
+        fragment.appendChild(span);
+        hasContentItem = true;
+        pack = [];
+        packLen = 0;
+    };
+
+    for (const token of tokens) {
+        if (token.kind === 'oversized') {
+            flushChunk();
+            flowChunkElement(token.node, segments, maxChars);
+            if (hasContentItem) fragment.appendChild(document.createTextNode(' '));
+            fragment.appendChild(token.node);
+            hasContentItem = true;
+        } else if (packLen && packLen + 1 + token.len > maxChars) {
+            flushChunk();
+            pack.push(token);
+            packLen += packLen ? 1 + token.len : token.len;
+        } else {
+            pack.push(token);
+            packLen += packLen ? 1 + token.len : token.len;
+        }
+    }
+    flushChunk();
+    if (trailing) fragment.appendChild(document.createTextNode(trailing));
+
+    while (element.firstChild) element.removeChild(element.firstChild);
+    element.appendChild(fragment);
+}
+
+/**
  * Add reader segment markers to sanitized HTML.
  *
  * Speakable elements whose trimmed text is <= 500 chars keep the single-element
@@ -193,19 +288,13 @@ export function prepareHtmlContent(html) {
             parent.removeChild(child);
         });
 
-        // Fallback for the rare heavily-inline-marked case: total trimmed text
-        // >500 chars but every direct text node is <=500 chars, so the chunking
-        // pass above created no spans and this element would silently become
-        // UNSPEAKABLE (a regression — before chunking it was one segment). Mark
-        // it as a single .tts-speakable again; accepted limitation: the whole
-        // paragraph stays one >500-char segment — better speakable-than-long
-        // than silent.
+        // Fallback for the heavily-inline-marked case: total trimmed text
+        // >500 chars but no direct text node >500 chars, so the pass above
+        // created no chunk spans. Flow-chunk the whole content into <=500-char
+        // spans so no oversized segment is ever produced (single-word chunks
+        // >500 chars remain the only documented exception).
         if (!element.querySelector('.tts-speakable')) {
-            const id = segments.length;
-            element.classList.add('tts-speakable');
-            element.setAttribute('data-tts-index', String(id));
-            element.setAttribute('data-tts-text', text);
-            segments.push({ id, text });
+            flowChunkElement(element, segments, 500);
         }
     });
 
