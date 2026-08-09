@@ -1,24 +1,88 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getAvailableEngines, engines } from '../../core/tts';
 import { bookStore } from '../../core/bookStore';
 import { formatBytes } from '../../core/quotaManager';
-import { Settings as SettingsIcon, X, HardDrive, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, X, HardDrive, Trash2, Play, Square } from 'lucide-react';
 import { useToast } from './Toast';
+
+const SAMPLE_TEXT = 'This is a preview of the selected voice.';
 
 export function Settings({ config, onConfigChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [voiceList, setVoiceList] = useState([]);
     const [voicesLoading, setVoicesLoading] = useState(false);
     const [storageInfo, setStorageInfo] = useState({ usage: 0, quota: 0, percentUsed: 0 });
+    const [modelInfo, setModelInfo] = useState(null);
+    const [isPreviewing, setIsPreviewing] = useState(false);
+    const previewGenRef = useRef(0);
     const { showToast } = useToast();
 
     const availableEngines = getAvailableEngines();
 
+    // Voice preview — standalone: never routed through Player state. The gen
+    // counter invalidates stale callbacks (an onEnd from a stopped preview must
+    // not clobber the state of a newer preview).
+    const stopPreview = useCallback(() => {
+        previewGenRef.current++;
+        engines[config.engineId]?.stop?.();
+        setIsPreviewing(false);
+    }, [config.engineId]);
+
+    const handlePreview = () => {
+        if (isPreviewing) {
+            stopPreview();
+            return;
+        }
+        const gen = ++previewGenRef.current;
+        const engine = engines[config.engineId];
+        if (!engine) return;
+        setIsPreviewing(true);
+        engine.speak(
+            SAMPLE_TEXT,
+            { voiceId: config.voiceId || undefined, rate: config.rate, pitch: config.pitch },
+            {
+                onEnd: () => {
+                    if (gen === previewGenRef.current) setIsPreviewing(false);
+                },
+                onError: (error) => {
+                    console.error('Voice preview failed:', error);
+                    if (gen === previewGenRef.current) setIsPreviewing(false);
+                    showToast('Preview failed', 'error');
+                }
+            }
+        );
+    };
+
+    const handleClose = useCallback(() => {
+        stopPreview();
+        setIsOpen(false);
+    }, [stopPreview]);
+
     // Close on Escape
     const handleKeyDown = useCallback((e) => {
-        if (e.key === 'Escape' && isOpen) setIsOpen(false);
-    }, [isOpen]);
+        if (e.key === 'Escape' && isOpen) handleClose();
+    }, [isOpen, handleClose]);
     useEffect(() => { window.addEventListener('keydown', handleKeyDown); return () => window.removeEventListener('keydown', handleKeyDown); }, [handleKeyDown]);
+
+    // Engine model info (kokoro only) — refreshed on open/engine change and after cache delete
+    useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            if (!isOpen || config.engineId !== 'kokoro') {
+                setModelInfo(null);
+                return;
+            }
+            try {
+                const info = await engines[config.engineId].getModelInfo?.();
+                if (!cancelled && info) setModelInfo(info);
+            } catch (error) {
+                console.error('Failed to load model info', error);
+                if (!cancelled) setModelInfo(null);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, [isOpen, config.engineId]);
 
     useEffect(() => {
         const checkEngine = () => {
@@ -60,10 +124,12 @@ export function Settings({ config, onConfigChange }) {
     }, [config, onConfigChange, isOpen, showToast]);
 
     const handleEngineChange = (e) => {
+        stopPreview(); // stop the outgoing engine's preview audio
         onConfigChange({ ...config, engineId: e.target.value, voiceId: '' });
     };
 
     const handleVoiceChange = (e) => {
+        stopPreview(); // preview would otherwise keep playing with the old voice
         onConfigChange({ ...config, voiceId: e.target.value });
     };
 
@@ -86,6 +152,18 @@ export function Settings({ config, onConfigChange }) {
         } catch (error) {
             console.error('Failed to delete all books', error);
             showToast('Could not delete all books.', 'error');
+        }
+    };
+
+    const handleDeleteCachedModel = async () => {
+        try {
+            await engines[config.engineId]?.deleteCachedModel?.();
+            showToast('Cached model deleted.', 'info');
+            const info = await engines[config.engineId]?.getModelInfo?.();
+            setModelInfo(info);
+        } catch (error) {
+            console.error('Failed to delete cached model', error);
+            showToast('Could not delete cached model.', 'error');
         }
     };
 
@@ -117,7 +195,7 @@ export function Settings({ config, onConfigChange }) {
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 id="settings-title" style={{ margin: 0, fontSize: '1rem' }}>Settings</h3>
-                <button onClick={() => setIsOpen(false)} className="icon-btn" aria-label="Close settings">
+                <button onClick={handleClose} className="icon-btn" aria-label="Close settings">
                     <X size={18} />
                 </button>
             </div>
@@ -136,21 +214,62 @@ export function Settings({ config, onConfigChange }) {
                 </select>
             </div>
 
+            {config.engineId === 'kokoro' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        On-device neural TTS. Model downloads on first use and is stored in your browser.
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {modelInfo
+                            ? `Model ${modelInfo.downloaded ? 'downloaded' : 'not downloaded'} · ${modelInfo.sizeMB} MB`
+                            : 'Checking model cache…'}
+                    </p>
+                    <button
+                        onClick={handleDeleteCachedModel}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            fontSize: '0.8rem',
+                            padding: '0.5rem 0.75rem',
+                            background: 'var(--danger-bg)',
+                            color: 'var(--danger-text)',
+                            border: '1px solid var(--danger-border)',
+                            borderRadius: '8px',
+                            alignSelf: 'flex-start'
+                        }}
+                    >
+                        <Trash2 size={14} />
+                        Delete cached model
+                    </button>
+                </div>
+            )}
+
 
             <div>
                 <label htmlFor="tts-voice" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Voice</label>
-                <select
-                    id="tts-voice"
-                    value={config.voiceId}
-                    onChange={handleVoiceChange}
-                    disabled={voicesLoading}
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
-                >
-                    <option value="">{voicesLoading ? 'Loading voices…' : 'System default'}</option>
-                    {voiceList.map(v => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                </select>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <select
+                        id="tts-voice"
+                        value={config.voiceId}
+                        onChange={handleVoiceChange}
+                        disabled={voicesLoading}
+                        style={{ flex: 1, width: 'auto', padding: '0.5rem', borderRadius: '4px' }}
+                    >
+                        <option value="">{voicesLoading ? 'Loading voices…' : 'System default'}</option>
+                        {voiceList.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={handlePreview}
+                        className="icon-btn"
+                        title={isPreviewing ? 'Stop preview' : 'Preview voice'}
+                        aria-label={isPreviewing ? 'Stop voice preview' : 'Preview voice'}
+                    >
+                        {isPreviewing ? <Square size={16} /> : <Play size={16} />}
+                    </button>
+                </div>
             </div>
 
             <div>
@@ -179,6 +298,11 @@ export function Settings({ config, onConfigChange }) {
                     onChange={handlePitchChange}
                     style={{ width: '100%' }}
                 />
+                {config.engineId === 'kokoro' && (
+                    <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Pitch is not supported by this engine.
+                    </p>
+                )}
             </div>
 
             {/* Storage Usage */}
@@ -242,8 +366,6 @@ export function Settings({ config, onConfigChange }) {
             <div style={{ marginTop: 'auto', fontSize: '0.75rem', opacity: 0.7 }}>
                 <p style={{ margin: '0 0 0.5rem 0' }}>
                     {config.engineId === 'webSpeech' && 'Uses your device\'s built-in voices.'}
-                    {config.engineId === 'edgeTTS' && 'High-quality neural voices from Microsoft Edge.'}
-                    {config.engineId === 'piper' && 'On-device neural voice (Piper). ~60 MB model per voice, downloaded once.'}
                 </p>
                 <a
                     href="/test-tts"
