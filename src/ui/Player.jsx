@@ -101,6 +101,11 @@ export function Player() {
     const playingRef = useRef(false);
     useEffect(() => { playingRef.current = playing; }, [playing]);
 
+    // Paused = engine suspended, NOT stopped (highlight/currentIndex/auto-continue stay put).
+    const [paused, setPaused] = useState(false);
+    const pausedRef = useRef(false);
+    useEffect(() => { pausedRef.current = paused; }, [paused]);
+
     // Chapter auto-continue: set when the last sentence of a chapter ends and a
     // next chapter exists; consumed by the post-render effect once its nodes load.
     const autoContinueRef = useRef(false);
@@ -130,6 +135,8 @@ export function Player() {
         const requestId = ++loadRequestRef.current;
         setLoading(true);
         setPlaying(false);
+        setPaused(false);
+        pausedRef.current = false;
         setError(null);
         setCurrentIndex(jumpToNode >= 0 ? jumpToNode : 0);
         setCurrentNodeCount(0);
@@ -317,7 +324,17 @@ export function Player() {
                     target.node.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     setSegmentClass(container, nodeToJump, 'tts-active', true);
                     if (!playingRef.current) {
-                        setTimeout(() => setSegmentClass(container, nodeToJump, 'tts-active', false), 2000);
+                        // Removal fires 2s later — re-check at fire time so a
+                        // play/pause that started meanwhile keeps its highlight
+                        // (the DOM may have been rebuilt by a re-render, so
+                        // re-assert the active class when playback is live).
+                        setTimeout(() => {
+                            if (playingRef.current || pausedRef.current) {
+                                setSegmentClass(container, currentIndex, 'tts-active', true);
+                            } else {
+                                setSegmentClass(container, nodeToJump, 'tts-active', false);
+                            }
+                        }, 2000);
                     }
                 }, 100);
             }
@@ -331,6 +348,15 @@ export function Player() {
             bookStore.saveProgress(id, currentSpineIndex, currentIndex, chapterId);
         }
     }, [id, currentSpineIndex, currentIndex, bookMeta]);
+
+    // Re-assert the live highlight after every render: re-renders re-apply
+    // dangerouslySetInnerHTML and wipe direct DOM class edits, so the active
+    // sentence must be re-marked while playing or paused.
+    useEffect(() => {
+        if ((playing || paused) && currentIndex >= 0 && contentRef.current) {
+            setSegmentClass(contentRef.current, currentIndex, 'tts-active', true);
+        }
+    });
 
     const calculateTimeLeft = () => {
         if (!bookMeta?.toc || !ttsConfig.rate) return null;
@@ -385,12 +411,30 @@ export function Player() {
     };
 
     // TTS Logic
+    const stopTTS = useCallback(() => {
+        playingRef.current = false;
+        pausedRef.current = false;
+        setPaused(false);
+        resumeOnConfigChangeRef.current = false;
+        autoContinueRef.current = false; // manual stop cancels pending auto-continue
+        playbackRequestRef.current += 1;
+        setPlaying(false);
+        const engine = engines[ttsConfig.engineId];
+        if (engine) engine.stop();
+        contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+    }, [ttsConfig.engineId]);
+
     const playFromIndex = useCallback(async (index) => {
         const requestId = ++playbackRequestRef.current;
         const currentEngine = engines[ttsConfig.engineId];
         if (currentEngine) currentEngine.stop();
         setPlaying(false);
         playingRef.current = false;
+        // Stale-paused guard: EVERY playback-initiation path clears both the
+        // React state and the ref — clearing only the ref leaves togglePlay
+        // reading a stale paused=true, so pause could never engage again.
+        setPaused(false);
+        pausedRef.current = false;
         contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
 
         if (index < 0) return;
@@ -400,7 +444,7 @@ export function Player() {
                 autoContinueRef.current = true;
                 goToNextChapter();
             } else {
-                setPlaying(false);
+                stopTTS();
             }
             return;
         }
@@ -450,9 +494,11 @@ export function Player() {
                 prefetchRef.current = { index: -1, promise: null }; // Consume
             }
 
-            // Trigger NEXT prefetch immediately
+            // Trigger NEXT prefetch immediately. Placed after the first await so
+            // a pause landing during the 50ms/synthesize window is caught here
+            // (an entry-level check would be dead code — entry cleared pausedRef).
             const nextIndex = index + 1;
-            if (nextIndex < currentNodes.current.length) {
+            if (!pausedRef.current && nextIndex < currentNodes.current.length) {
                 const nextText = currentNodes.current[nextIndex].text;
                 console.log('Prefetching next index:', nextIndex);
                 prefetchRef.current = {
@@ -485,7 +531,7 @@ export function Player() {
             console.error(e);
             setPlaying(false);
         }
-    }, [ttsConfig, book, parser, currentSpineIndex, goToNextChapter]);
+    }, [ttsConfig, book, parser, currentSpineIndex, goToNextChapter, stopTTS]);
 
     const handleContentClick = useCallback((e) => {
         if (isLongPress.current) {
@@ -496,9 +542,10 @@ export function Player() {
         const segment = resolveSegmentTarget(e.target, contentRef.current);
         if (segment) {
             e.stopPropagation();
+            engines[ttsConfig.engineId]?.warmAudio?.(); // tap is a gesture — warm audio before the async start
             playFromIndex(segment.index);
         }
-    }, [playFromIndex]);
+    }, [playFromIndex, ttsConfig.engineId]);
 
 
     useEffect(() => {
@@ -510,11 +557,13 @@ export function Player() {
             .some(key => previousConfig[key] !== ttsConfig[key]);
         if (!configChanged) return;
 
-        const shouldResume = playingRef.current || resumeOnConfigChangeRef.current;
+        const shouldResume = (playingRef.current || resumeOnConfigChangeRef.current) && !pausedRef.current;
         const resumeIndex = currentIndex;
         resumeOnConfigChangeRef.current = shouldResume;
         playbackRequestRef.current += 1;
         playingRef.current = false;
+        pausedRef.current = false;
+        setPaused(false); // the old config's session is dead — next click starts fresh, never stale-resumes
         engines[previousConfig.engineId]?.stop();
         setPlaying(false);
         contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
@@ -533,6 +582,7 @@ export function Player() {
     useEffect(() => () => {
         playbackRequestRef.current += 1;
         playingRef.current = false;
+        pausedRef.current = false;
         resumeOnConfigChangeRef.current = false;
         autoContinueRef.current = false;
         engines[previousTtsConfigRef.current?.engineId]?.stop();
@@ -542,25 +592,46 @@ export function Player() {
     }, []);
     useEffect(() => { playNextRef.current = playFromIndex; }, [playFromIndex]);
 
-    const stopTTS = useCallback(() => {
-        playingRef.current = false;
-        resumeOnConfigChangeRef.current = false;
-        autoContinueRef.current = false; // manual stop cancels pending auto-continue
-        playbackRequestRef.current += 1;
-        setPlaying(false);
-        const engine = engines[ttsConfig.engineId];
-        if (engine) engine.stop();
-        contentRef.current?.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
-    }, [ttsConfig.engineId]);
-
     const togglePlay = useCallback(() => {
+        const engine = engines[ttsConfig.engineId] || engines.webSpeech;
         if (playing) {
-            stopTTS();
+            // Playing → pause: suspend the engine only — NO stopTTS (no gen
+            // bump, no highlight clear, no autoContinueRef clear). onEnd cannot
+            // fire while suspended, so no advance happens either.
+            engine?.pause?.();
+            setPaused(true);
+            pausedRef.current = true;
+            setPlaying(false);
+            playingRef.current = false;
+        } else if (paused) {
+            // Paused → resume: warm the AudioContext synchronously inside this
+            // gesture (iOS requires it before async speak resolves), then resume.
+            const startIndex = currentIndex >= 0 ? currentIndex : 0;
+            const fallback = () => {
+                console.log('Engine resume failed — restarting from index', startIndex);
+                playFromIndex(startIndex); // also clears paused (stale-paused guard)
+            };
+            engine?.warmAudio?.();
+            try {
+                const result = engine?.resume?.();
+                if (result && typeof result.catch === 'function') {
+                    result.catch(() => { if (pausedRef.current) fallback(); });
+                }
+                setPaused(false);
+                pausedRef.current = false;
+                setPlaying(true);
+                playingRef.current = true;
+            } catch (error) {
+                console.error('Engine resume threw — restarting from index', startIndex, error);
+                fallback();
+            }
         } else {
-            const start = currentIndex >= 0 ? currentIndex : 0;
-            playFromIndex(start);
+            // Stopped → start: warm the context in the gesture; playFromIndex
+            // awaits setTimeout(50) before speak, so warm-up cannot happen later.
+            engine?.warmAudio?.();
+            playFromIndex(currentIndex >= 0 ? currentIndex : 0);
         }
-    }, [playing, currentIndex, playFromIndex, stopTTS]);
+    }, [playing, paused, currentIndex, ttsConfig.engineId, playFromIndex]);
 
     const saveBookmark = useCallback(async (spineIndex, nodeIndex, text) => {
         try {
