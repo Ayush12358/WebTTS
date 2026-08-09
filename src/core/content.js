@@ -192,6 +192,21 @@ export function prepareHtmlContent(html) {
             replacement.forEach(node => parent.insertBefore(node, child));
             parent.removeChild(child);
         });
+
+        // Fallback for the rare heavily-inline-marked case: total trimmed text
+        // >500 chars but every direct text node is <=500 chars, so the chunking
+        // pass above created no spans and this element would silently become
+        // UNSPEAKABLE (a regression — before chunking it was one segment). Mark
+        // it as a single .tts-speakable again; accepted limitation: the whole
+        // paragraph stays one >500-char segment — better speakable-than-long
+        // than silent.
+        if (!element.querySelector('.tts-speakable')) {
+            const id = segments.length;
+            element.classList.add('tts-speakable');
+            element.setAttribute('data-tts-index', String(id));
+            element.setAttribute('data-tts-text', text);
+            segments.push({ id, text });
+        }
     });
 
     return { html: container.innerHTML, segments };
