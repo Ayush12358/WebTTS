@@ -19,7 +19,7 @@
     "localforage": "^1.10.0",
     "lucide-react": "^0.562.0",
     "marked": "^17.0.1",
-    "pdfjs-dist": "^5.4.624",
+    "pdfjs-dist": "^6.2.108",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.12.0",
