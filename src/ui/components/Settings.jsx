@@ -13,6 +13,7 @@ export function Settings({ config, onConfigChange }) {
     const [voicesLoading, setVoicesLoading] = useState(false);
     const [storageInfo, setStorageInfo] = useState({ usage: 0, quota: 0, percentUsed: 0 });
     const [modelInfo, setModelInfo] = useState(null);
+    const [apiKeyInput, setApiKeyInput] = useState('');
     const [isPreviewing, setIsPreviewing] = useState(false);
     const previewGenRef = useRef(0);
     const previewActiveRef = useRef(false); // true while a preview speak is actually in flight
@@ -67,7 +68,7 @@ export function Settings({ config, onConfigChange }) {
                         previewActiveRef.current = false;
                         setIsPreviewing(false);
                     }
-                    showToast('Preview failed', 'error');
+                    showToast(error?.message || 'Preview failed', 'error');
                 }
             }
         );
@@ -101,6 +102,22 @@ export function Settings({ config, onConfigChange }) {
             }
         };
         load();
+        return () => { cancelled = true; };
+    }, [isOpen, config.engineId]);
+
+    // Online engine API key — loaded from IndexedDB on open, mirrored into the
+    // engine singleton so speak/preview use it without further round-trips.
+    useEffect(() => {
+        if (!isOpen || config.engineId !== 'onlineKokoro') return;
+        let cancelled = false;
+        const load = async () => {
+            const saved = await bookStore.getSettings('deepinfraApiKey');
+            if (!cancelled && saved) {
+                setApiKeyInput(saved);
+                engines.onlineKokoro?.setApiKey?.(saved);
+            }
+        };
+        load().catch(error => console.error('Failed to load API key', error));
         return () => { cancelled = true; };
     }, [isOpen, config.engineId]);
 
@@ -180,6 +197,17 @@ export function Settings({ config, onConfigChange }) {
     const handleVoiceChange = (e) => {
         stopPreview(); // preview would otherwise keep playing with the old voice
         onConfigChange({ ...config, voiceId: e.target.value });
+    };
+
+    // Live-mirror into the engine singleton so a preview right after typing
+    // already uses the new key; persisted to IndexedDB on every change.
+    const handleApiKeyChange = (e) => {
+        const value = e.target.value;
+        setApiKeyInput(value);
+        engines.onlineKokoro?.setApiKey?.(value);
+        bookStore.saveSettings('deepinfraApiKey', value).catch(error => {
+            console.error('Failed to save API key', error);
+        });
     };
 
     const handleRateChange = (e) => {
@@ -317,6 +345,22 @@ export function Settings({ config, onConfigChange }) {
                 </div>
             )}
 
+            {config.engineId === 'onlineKokoro' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Free: several community-hosted Kokoro servers (no key needed) — rotates automatically when one is rate-limited. Slow — several seconds per sentence, occasional cold starts. Optional: add a DeepInfra API key (deepinfra.com) for fast, reliable playback.
+                    </p>
+                    <input
+                        type="password"
+                        value={apiKeyInput}
+                        onChange={handleApiKeyChange}
+                        placeholder="DeepInfra API key (optional — leave empty for free)"
+                        autoComplete="off"
+                        style={{ width: '100%', padding: '0.5rem', borderRadius: '4px' }}
+                    />
+                </div>
+            )}
+
 
             <div>
                 <label htmlFor="tts-voice" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Voice</label>
@@ -370,7 +414,7 @@ export function Settings({ config, onConfigChange }) {
                     onChange={handlePitchChange}
                     style={{ width: '100%' }}
                 />
-                {config.engineId === 'kokoro' && (
+                {(config.engineId === 'kokoro' || config.engineId === 'onlineKokoro') && (
                     <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         Pitch is not supported by this engine.
                     </p>

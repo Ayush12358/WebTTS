@@ -1,24 +1,5 @@
 import { TTSEngine } from './TTSEngine.js';
-import { clampRate, estimateWordBoundaries } from './ttsUtils.js';
-
-/**
- * Curated Kokoro-82M voices (model voice IDs). Listing voices must NOT load the
- * ~88MB model — this list is static.
- */
-export const KOKORO_VOICES = [
-    { id: 'af_heart', name: 'Heart (US Female)', lang: 'en-US', source: 'Kokoro' },
-    { id: 'af_bella', name: 'Bella (US Female)', lang: 'en-US', source: 'Kokoro' },
-    { id: 'af_nicole', name: 'Nicole (US Female)', lang: 'en-US', source: 'Kokoro' },
-    { id: 'af_sarah', name: 'Sarah (US Female)', lang: 'en-US', source: 'Kokoro' },
-    { id: 'am_michael', name: 'Michael (US Male)', lang: 'en-US', source: 'Kokoro' },
-    { id: 'am_puck', name: 'Puck (US Male)', lang: 'en-US', source: 'Kokoro' },
-    { id: 'bf_emma', name: 'Emma (UK Female)', lang: 'en-GB', source: 'Kokoro' },
-    { id: 'bf_isabella', name: 'Isabella (UK Female)', lang: 'en-GB', source: 'Kokoro' },
-    { id: 'bm_george', name: 'George (UK Male)', lang: 'en-GB', source: 'Kokoro' },
-    { id: 'bm_lewis', name: 'Lewis (UK Male)', lang: 'en-GB', source: 'Kokoro' }
-];
-
-export const DEFAULT_VOICE = 'af_heart';
+import { clampRate, estimateWordBoundaries, KOKORO_VOICES, DEFAULT_VOICE } from './ttsUtils.js';
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 

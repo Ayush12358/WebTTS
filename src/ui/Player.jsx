@@ -606,14 +606,17 @@ export function Player() {
                 },
                 onError: (e) => {
                     console.error(e);
-                    if (requestId === playbackRequestRef.current) setPlaying(false);
+                    if (requestId === playbackRequestRef.current) {
+                        showToast(`Playback error: ${e?.message || 'Unknown error'}`, 'error');
+                        setPlaying(false);
+                    }
                 }
             });
         } catch (e) {
             console.error(e);
             setPlaying(false);
         }
-    }, [ttsConfig, book, parser, currentSpineIndex, goToNextChapter, stopTTS]);
+    }, [ttsConfig, book, parser, currentSpineIndex, goToNextChapter, stopTTS, showToast]);
 
     const handleContentClick = useCallback((e) => {
         if (isLongPress.current) {

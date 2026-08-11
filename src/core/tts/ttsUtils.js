@@ -1,7 +1,27 @@
 /**
- * Pure helper functions shared by TTS engines: word-boundary chunking,
- * estimated word-boundary events, and rate clamping.
+ * Pure helpers and static model metadata shared by TTS engines: word-boundary
+ * chunking, estimated word-boundary events, rate clamping, and the curated
+ * Kokoro voice list (used by both the on-device and online Kokoro engines).
  */
+
+/**
+ * Curated Kokoro-82M voices (model voice IDs). Listing voices must NOT load the
+ * ~88MB model — this list is static.
+ */
+export const KOKORO_VOICES = [
+    { id: 'af_heart', name: 'Heart (US Female)', lang: 'en-US', source: 'Kokoro' },
+    { id: 'af_bella', name: 'Bella (US Female)', lang: 'en-US', source: 'Kokoro' },
+    { id: 'af_nicole', name: 'Nicole (US Female)', lang: 'en-US', source: 'Kokoro' },
+    { id: 'af_sarah', name: 'Sarah (US Female)', lang: 'en-US', source: 'Kokoro' },
+    { id: 'am_michael', name: 'Michael (US Male)', lang: 'en-US', source: 'Kokoro' },
+    { id: 'am_puck', name: 'Puck (US Male)', lang: 'en-US', source: 'Kokoro' },
+    { id: 'bf_emma', name: 'Emma (UK Female)', lang: 'en-GB', source: 'Kokoro' },
+    { id: 'bf_isabella', name: 'Isabella (UK Female)', lang: 'en-GB', source: 'Kokoro' },
+    { id: 'bm_george', name: 'George (UK Male)', lang: 'en-GB', source: 'Kokoro' },
+    { id: 'bm_lewis', name: 'Lewis (UK Male)', lang: 'en-GB', source: 'Kokoro' }
+];
+
+export const DEFAULT_VOICE = 'af_heart';
 
 /**
  * Split text into chunks of at most `maxChars` characters, never splitting a word.

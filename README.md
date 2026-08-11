@@ -13,6 +13,7 @@ A minimalistic, high-fidelity PWA for converting ebooks into immersive audiobook
 - **Advanced TTS Engines**:
   - **System TTS**: Utilizes the native Web Speech API (Free, Offline). The engine registry (`src/core/tts/`) makes it easy to add more sources later.
   - **Kokoro (On-device Neural)**: Free, offline, private, high-quality neural voices (~88MB model downloaded on first use).
+  - **Kokoro (Online)**: The same Kokoro-82M voices via a pool of free community-hosted HF Spaces with round-robin + failover by default — no model download, no key needed (slow, occasional cold starts); optional DeepInfra API key for fast, reliable playback. Key stored only in the browser.
 - **Interactive Player**:
   - **Read-Along Highlighting**: Follow along with sentence-level synchronization.
   - **Swipe Navigation**: Swipe left/right on mobile to jump between sentences.
@@ -30,7 +31,7 @@ A minimalistic, high-fidelity PWA for converting ebooks into immersive audiobook
 - **Framework**: React 19 + Vite
 - **Storage**: IndexedDB (via `localforage`) for books, metadata, bookmarks, and settings.
 - **Parsing**: `epub.js` for ebooks, `pdfjs-dist` for PDFs, `marked` for Markdown.
-- **TTS**: Web Speech API + Kokoro-82M (kokoro-js)
+- **TTS**: Web Speech API + Kokoro-82M (kokoro-js on-device, HF Space online by default, optional DeepInfra)
 - **Icons**: Lucide React
 - **PWA**: `vite-plugin-pwa`
 

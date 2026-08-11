@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_VOICE, KOKORO_VOICES, KokoroEngine } from '../src/core/tts/KokoroEngine.js';
+import { KokoroEngine } from '../src/core/tts/KokoroEngine.js';
+import { DEFAULT_VOICE, KOKORO_VOICES } from '../src/core/tts/ttsUtils.js';
 
 const PRIOR_ART_IDS = [
     'af_heart', 'af_bella', 'af_nicole', 'af_sarah', 'am_michael',

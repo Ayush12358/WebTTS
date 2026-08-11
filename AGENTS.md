@@ -25,7 +25,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 |----------|-----------|---------------|------------------|
 | **Parsers** | `BookParser` | `src/core/parsers/index.js` | Extend `BookParser`, implement `canParse()` + `parse()`, add to the `parsers` array |
 | **TTS Engines** | `TTSEngine` | `src/core/tts/index.js` | Extend `TTSEngine`, implement `speak()`, add to the `engines` object |
-| **TTS engines in registry** | — | — | `webSpeech` (System TTS), `kokoro` (Kokoro (On-device Neural)) |
+| **TTS engines in registry** | — | — | `webSpeech` (System TTS), `kokoro` (Kokoro (On-device Neural)), `onlineKokoro` (Kokoro (Online)) |
 
 **Parser return shape** (from `parse()`): `{ title, author, cover: Blob|null, toc: [{ title, href, words, spineIndex? }], spineLength, instance }`
 
@@ -95,7 +95,7 @@ User imports book → Parser extracts metadata+TOC → IndexedDB (localforage)
 
 ## Pitfalls
 
-1. **Two TTS engines shipped: `webSpeech` + `kokoro`** — The registry pattern in `src/core/tts/` is the extension point for new sources: extend `TTSEngine`, implement `speak()`, register in `engines`/`getAvailableEngines()`. Stale persisted configs are handled: `Settings` falls back to `webSpeech` when the stored `engineId` no longer exists, and `Player` resolves `engines[ttsConfig.engineId] || engines.webSpeech` before speaking. Kokoro emits estimated word boundaries; Web Speech boundary events remain unreliable on Firefox/Safari. Estimated word boundaries are emitted only by the Kokoro engine; the Web Speech engine does not emit them (unreliable in Firefox/Chrome Android) — a documented omission.
+1. **Three TTS engines shipped: `webSpeech` + `kokoro` (on-device) + `onlineKokoro` (a pool of free community HF Spaces with round-robin + failover by default, optional DeepInfra key)** — The registry pattern in `src/core/tts/` is the extension point for new sources: extend `TTSEngine`, implement `speak()`, register in `engines`/`getAvailableEngines()`. Stale persisted configs are handled: `Settings` falls back to `webSpeech` when the stored `engineId` no longer exists, and `Player` resolves `engines[ttsConfig.engineId] || engines.webSpeech` before speaking. Kokoro emits estimated word boundaries; Web Speech boundary events remain unreliable on Firefox/Safari. Estimated word boundaries are emitted only by the Kokoro engine; the Web Speech engine does not emit them (unreliable in Firefox/Chrome Android) — a documented omission. The online engine works keyless against a pool of free community HF Spaces (`FREE_ENDPOINTS` — round-robin with failover; slow, may sleep); an optional DeepInfra API key switches it to fast, reliable playback. The key is per-user: persisted to IndexedDB under `settings.deepinfraApiKey` by Settings and injected at runtime via `setApiKey()` — it never ships in the bundle.
 2. **IndexedDB quota** — ~50MB per origin. Large EPUBs with images can exceed it. Quota check warns on import but doesn't block; Settings shows usage bar.
 3. **PDF OCR** — Native text extraction is preferred; image-only pages use lazy local English Tesseract.js OCR. Complex layouts and non-English scans remain best-effort.
 4. **Web Speech API varies** — Sentence boundary events unreliable on Firefox/Safari.
